@@ -1,0 +1,45 @@
+body { background: #f7f8fa; }
+
+.static-app { min-height: 100vh; padding-bottom: 42px; }
+.static-demo-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+  border: 1px solid #cce9dd; border-radius: 99px; background: #f2fbf7;
+  color: #147d5a; font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em;
+}
+.static-demo-badge i { width: 6px; height: 6px; border-radius: 50%; background: #20a36f; }
+.demo-notice {
+  display: flex; align-items: center; gap: 11px; margin-bottom: 20px; padding: 10px 13px;
+  border: 1px solid #d9e3fa; border-radius: 8px; background: #f4f7ff; color: #465675;
+}
+.demo-notice > span { flex: 0 0 auto; padding: 4px 7px; border-radius: 4px; background: #2458d6; color: white; font: 700 8px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.demo-notice p { margin: 0; font-size: 10px; line-height: 1.45; }
+.static-sidebar { transform: none !important; }
+.static-detail, .static-raw, .static-about { padding-top: 88px; }
+.static-plot-card { position: sticky; }
+.static-footer {
+  position: absolute; left: 244px; right: 0; bottom: 0; min-height: 42px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  border-top: 1px solid #dfe4ec; background: #fafbfc; color: #7a8495; font-size: 9px;
+}
+.static-footer a { color: #2458d6; font-weight: 700; }
+.static-detail + .static-footer, .static-raw + .static-footer, .static-about + .static-footer { left: 0; }
+.static-raw .raw-controls { grid-template-columns: minmax(240px, 1fr) 170px; }
+.static-about .about-grid { margin-top: 8px; }
+.metadata-actions .button:last-child { grid-column: 1 / -1; }
+
+@media (max-width: 900px) {
+  .static-dashboard { display: grid; grid-template-columns: 210px minmax(0, 1fr); }
+  .static-sidebar { position: fixed; width: 210px; }
+  .static-dashboard .catalog-main { grid-column: 2; }
+  .static-footer { left: 210px; }
+}
+
+@media (max-width: 720px) {
+  .static-demo-badge { display: none; }
+  .static-dashboard { display: block; }
+  .static-sidebar { position: static; width: auto; max-height: none; margin: 0 14px; padding: 16px; border: 1px solid #dfe4ec; border-radius: 10px; transform: none; }
+  .static-dashboard .catalog-main { padding-top: 20px; }
+  .static-footer { position: static; margin-top: 20px; padding: 12px; text-align: center; }
+  .demo-notice { align-items: flex-start; }
+}
+
