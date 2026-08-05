@@ -11,6 +11,7 @@ type Props = {
 
 export function AppHeader({ onToggleFilters, filtersOpen }: Props) {
   const [scanState, setScanState] = useState<"idle" | "scanning" | "done" | "error">("idle");
+  const localCatalogMode = Boolean(process.env.NEXT_PUBLIC_TRACE_API_URL);
 
   async function rebuild() {
     setScanState("scanning");
@@ -46,16 +47,18 @@ export function AppHeader({ onToggleFilters, filtersOpen }: Props) {
           </Link>
         </div>
         <nav className="header-actions" aria-label="Primary navigation">
-          <button className="button button-secondary" type="button" onClick={rebuild} disabled={scanState === "scanning"}>
-            <span className={scanState === "scanning" ? "spin" : ""} aria-hidden="true">↻</span>
-            {scanState === "scanning" ? "Scanning…" : scanState === "error" ? "Scan failed" : "Import / Scan Data"}
-          </button>
+          {localCatalogMode ? (
+            <button className="button button-secondary" type="button" onClick={rebuild} disabled={scanState === "scanning"}>
+              <span className={scanState === "scanning" ? "spin" : ""} aria-hidden="true">↻</span>
+              {scanState === "scanning" ? "Scanning…" : scanState === "error" ? "Scan failed" : "Import / Scan Data"}
+            </button>
+          ) : <Link className="button button-primary" href="/contribute">Contribute data</Link>}
+          {!localCatalogMode ? <Link className="button button-secondary" href="/review">Review</Link> : null}
           <Link className="button button-ghost" href="/about">
-            <span aria-hidden="true">ⓘ</span> About Dataset
+            <span aria-hidden="true">ⓘ</span> {localCatalogMode ? "About Dataset" : "Data format"}
           </Link>
         </nav>
       </div>
     </header>
   );
 }
-

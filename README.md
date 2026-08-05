@@ -1,6 +1,6 @@
 # Training Power Trace Explorer
 
-Training Power Trace Explorer is a local-only research dashboard for scanning, filtering, validating, and interactively inspecting LLM training GPU power traces. The catalog preserves source paths, normalizes multiple logger schemas, computes timestamp-aware power metrics, and records every parse failure.
+Training Power Trace Explorer has two complementary modes: a local research dashboard for scanning, filtering, validating, and interactively inspecting private LLM training GPU power traces, plus a hosted community contribution flow for reviewed, consented data sharing. The local catalog preserves source paths, normalizes multiple logger schemas, computes timestamp-aware power metrics, and records every parse failure.
 
 ## Public demo
 
@@ -9,6 +9,17 @@ A synthetic-data-only demonstration is published through GitHub Pages:
 **[https://leo-hxu.github.io/training-power-trace-explorer/](https://leo-hxu.github.io/training-power-trace-explorer/)**
 
 The public build is generated from `github-pages/` with `npm run build:pages`. It contains deterministic examples only and does not include real traces, logs, cache files, or access to the local FastAPI service. The complete scanner and API remain local by design.
+
+## Community submissions
+
+The hosted application adds a signed-in contribution flow for external researchers:
+
+- Contributors upload one power-trace CSV and optional `meta.json` / `manifest.json`.
+- The site checks file size, CSV headers, and usable time and power values before storing the files.
+- Every submission is private until an administrator reviews it.
+- Publication requires explicit contributor consent; only published submissions are visible and downloadable publicly.
+
+The hosted runtime uses an R2 binding named `UPLOADS` for the source files and a D1 binding named `DB` for submission metadata, ownership, and review status. Set `ADMIN_EMAILS` in the hosted environment to a comma-separated list of reviewer ChatGPT sign-in emails. Do not commit reviewer email addresses, credentials, or uploaded traces to the repository.
 
 ## Quick start
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "./components/AppHeader";
+import { CommunityCatalog } from "./components/CommunityCatalog";
 import { EmptyState, FormatValue, LoadingBlock, QualityBadge } from "./components/Ui";
 import { API_BASE, apiFetch, fetchFilters, type RunsResponse } from "./lib/api";
 import type { Filters, Run } from "./lib/types";
@@ -79,6 +80,11 @@ function FilterSelect({
 }
 
 export default function HomePage() {
+  if (!process.env.NEXT_PUBLIC_TRACE_API_URL) return <CommunityCatalog />;
+  return <LocalCatalog />;
+}
+
+function LocalCatalog() {
   const router = useRouter();
   const [availableFilters, setAvailableFilters] = useState<Filters>({});
   const [filters, setFilters] = useState<FilterState>({});

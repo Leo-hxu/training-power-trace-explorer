@@ -1,0 +1,2 @@
+CREATE INDEX `trace_submissions_status_created_idx` ON `trace_submissions` (`status`,`created_at`);--> statement-breakpoint
+CREATE INDEX `trace_submissions_submitter_created_idx` ON `trace_submissions` (`submitter_email`,`created_at`);

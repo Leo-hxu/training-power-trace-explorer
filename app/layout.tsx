@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     default: "Training Power Trace Explorer",
     template: "%s · Training Power Trace Explorer",
   },
-  description: "Local interactive visualization and metadata browser for LLM training GPU power traces.",
+  description: "Collect, review, and explore LLM training GPU power traces.",
 };
 
 export default function RootLayout({

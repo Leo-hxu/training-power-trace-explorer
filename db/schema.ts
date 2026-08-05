@@ -1,4 +1,31 @@
-// Intentionally empty by default.
-// Add Drizzle tables here when the site actually needs a database.
-// See examples/d1/db/schema.ts for an opt-in example.
-export {};
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const traceSubmissions = sqliteTable("trace_submissions", {
+  id: text("id").primaryKey(),
+  submitterEmail: text("submitter_email").notNull(),
+  submitterName: text("submitter_name"),
+  traceFilename: text("trace_filename").notNull(),
+  metadataFilename: text("metadata_filename"),
+  traceStorageKey: text("trace_storage_key").notNull(),
+  metadataStorageKey: text("metadata_storage_key"),
+  traceBytes: integer("trace_bytes").notNull(),
+  metadataBytes: integer("metadata_bytes").notNull().default(0),
+  status: text("status", { enum: ["pending", "published", "rejected"] }).notNull().default("pending"),
+  publicConsent: integer("public_consent", { mode: "boolean" }).notNull().default(false),
+  reviewNote: text("review_note"),
+  reviewedAt: text("reviewed_at"),
+  reviewedBy: text("reviewed_by"),
+  runId: text("run_id"),
+  model: text("model"),
+  modelFamily: text("model_family"),
+  method: text("method"),
+  gpuType: text("gpu_type"),
+  gpuCount: text("gpu_count"),
+  rowCount: integer("row_count").notNull(),
+  gpuIdsJson: text("gpu_ids_json").notNull(),
+  headersJson: text("headers_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trace_submissions_status_created_idx").on(table.status, table.createdAt),
+  index("trace_submissions_submitter_created_idx").on(table.submitterEmail, table.createdAt),
+]);

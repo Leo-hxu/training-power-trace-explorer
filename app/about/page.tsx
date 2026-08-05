@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AppHeader } from "../components/AppHeader";
 import { API_BASE } from "../lib/api";
 
+const localCatalogMode = Boolean(process.env.NEXT_PUBLIC_TRACE_API_URL);
+
 export default function AboutPage() {
   return (
     <div className="app-frame">
@@ -11,8 +13,8 @@ export default function AboutPage() {
         <section className="about-hero">
           <p className="eyebrow">Methodology and provenance</p>
           <h1>About the trace explorer</h1>
-          <p>Training Power Trace Explorer is a local research instrument for comparing GPU power behavior across LLM training configurations. It catalogs files in place, records every parse failure, and keeps uncertain metadata explicit.</p>
-          <div className="privacy-callout"><span className="privacy-dot" /><div><strong>Local by design</strong><p>No trace, log, manifest, or metadata file is uploaded to a cloud service.</p></div></div>
+          <p>{localCatalogMode ? "Training Power Trace Explorer is a local research instrument for comparing GPU power behavior across LLM training configurations. It catalogs files in place, records every parse failure, and keeps uncertain metadata explicit." : "Training Power Trace Explorer accepts community-contributed GPU power traces. Every cloud submission is validated, private by default, and only published after contributor consent and administrator review."}</p>
+          <div className="privacy-callout"><span className="privacy-dot" /><div><strong>{localCatalogMode ? "Local by design" : "Contributor-controlled publication"}</strong><p>{localCatalogMode ? "No trace, log, manifest, or metadata file is uploaded to a cloud service." : "CSV and metadata remain private until a reviewer publishes a contributor-authorized submission."}</p></div></div>
         </section>
 
         <div className="about-grid">
@@ -54,7 +56,7 @@ export default function AboutPage() {
             <p>All parse failures are included in <code>trace_explorer_cache/catalog_report.md</code>. Unknown precision, GPU type, model, or training settings are not fabricated.</p>
           </section>
         </div>
-        <div className="about-actions"><Link className="button button-primary" href="/">← Return to Trace Catalog</Link><a className="button button-secondary" href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">Open local API docs ↗</a></div>
+        <div className="about-actions"><Link className="button button-primary" href="/">← Return to Trace Catalog</Link>{localCatalogMode ? <a className="button button-secondary" href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">Open local API docs ↗</a> : <Link className="button button-secondary" href="/contribute">Contribute a trace</Link>}</div>
       </main>
     </div>
   );
