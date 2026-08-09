@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "source_family": "PowerTraces",
+  "discovered_traces": 1116,
+  "successfully_normalized": 1116,
+  "published_runs": 9,
+  "excluded_runs": 1107,
+  "selection_policy": "One smallest PASS_MAIN run per observed model-family and GPU-type stratum.",
+  "exclusions": [
+    {
+      "reason": "not_selected_by_publication_policy",
+      "count": 415
+    },
+    {
+      "reason": "quality_status_not_PASS_MAIN",
+      "count": 692
+    }
+  ],
+  "safety": {
+    "absolute_source_paths_included": false,
+    "training_logs_included": false,
+    "slurm_files_included": false
+  }
+}

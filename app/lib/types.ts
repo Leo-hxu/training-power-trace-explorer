@@ -37,7 +37,7 @@ export type Run = {
   has_clock_telemetry: boolean;
   has_utilization_telemetry: boolean;
   has_temperature_telemetry: boolean;
-  quality_status: "Good" | "Warning" | "Error";
+  quality_status: string;
   mean_total_power_w: number;
   p95_total_power_w: number;
   p99_total_power_w: number;

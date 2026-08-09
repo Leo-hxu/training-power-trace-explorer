@@ -119,6 +119,7 @@ select, .raw-controls input[type="number"] { height: 34px; border: 1px solid #d5
 .quality-badge { display: inline-flex; align-items: center; gap: 5px; min-width: 62px; padding: 4px 7px; border-radius: 99px; font-size: 9px; font-weight: 700; }
 .quality-badge i { width: 5px; height: 5px; border-radius: 50%; }
 .quality-good { background: #eaf8f1; color: var(--green); }.quality-good i { background: #1e9b6d; }
+.quality-pass_main { background: #eaf8f1; color: var(--green); }.quality-pass_main i { background: #1e9b6d; }
 .quality-warning { background: #fff5df; color: var(--amber); }.quality-warning i { background: #d98700; }
 .quality-error { background: #fff0f0; color: var(--red); }.quality-error i { background: #d63b3b; }
 .row-arrow { color: #8b95a7; font-size: 15px; }

@@ -1,4 +1,4 @@
-name: Deploy public demo to GitHub Pages
+name: Deploy public dataset to GitHub Pages
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build static demo
+      - name: Build static site
         run: npm run build:pages
 
       - name: Configure Pages

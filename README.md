@@ -2,13 +2,13 @@
 
 Training Power Trace Explorer has two complementary modes: a local research dashboard for scanning, filtering, validating, and interactively inspecting private LLM training GPU power traces, plus a hosted community contribution flow for reviewed, consented data sharing. The local catalog preserves source paths, normalizes multiple logger schemas, computes timestamp-aware power metrics, and records every parse failure.
 
-## Public demo
+## Public dataset
 
-A synthetic-data-only demonstration is published through GitHub Pages:
+Reviewed GPU training power traces are published through GitHub Pages:
 
 **[https://leo-hxu.github.io/training-power-trace-explorer/](https://leo-hxu.github.io/training-power-trace-explorer/)**
 
-The public build is generated from `github-pages/` with `npm run build:pages`. It contains deterministic examples only and does not include real traces, logs, cache files, or access to the local FastAPI service. The complete scanner and API remain local by design.
+The public build is generated from `github-pages/` with `npm run build:pages`. It contains only intentionally public, research-ready canonical exports; it does not include training logs, Slurm scripts, cache files, source-system paths, or access to the local FastAPI service. The complete scanner and private-data API remain local by design. Selection details and exclusion counts are recorded in `github-pages/public-data/publication-audit.json`.
 
 ## Community submissions
 
@@ -26,7 +26,7 @@ The hosted runtime uses an R2 binding named `UPLOADS` for the source files and a
 On the project host:
 
 ```bash
-cd /scratch/hx2493/project/llm_example_run/power_trace_explorer
+cd training-power-trace-explorer
 ./run_app.sh
 ```
 
@@ -34,17 +34,11 @@ Then open [http://localhost:3000](http://localhost:3000). The local API referenc
 
 The startup script creates an isolated Python environment on first use, installs the small backend dependency set, scans the configured directories when inputs changed, and starts the API and web interface together. Press `Ctrl-C` to stop both services.
 
-If the default scratch project does not exist, the app creates and catalogs three clearly labeled synthetic demo runs under `demo_project/`. Demo metadata is never mixed with a real `/scratch/...` project.
+If the configured private project does not exist, the app creates and catalogs three clearly labeled generated fallback runs under `demo_project/`. Fallback metadata is never mixed with a real private project.
 
 ## Data location
 
-The default project root is:
-
-```text
-/scratch/hx2493/project/llm_example_run
-```
-
-The scanner checks the requested `traces`, `logs_train`, `slurm`, `trace2flex_pilot_*`, and `PowerTraces` directories beneath that root. Override or extend the scan without editing code:
+The project root is configured locally and is never included in public exports. The scanner checks the requested `traces`, `logs_train`, `slurm`, `trace2flex_pilot_*`, and `PowerTraces` directories beneath that root. Override or extend the scan without editing code:
 
 ```bash
 export TRACE_EXPLORER_PROJECT_ROOT=/path/to/llm_example_run
