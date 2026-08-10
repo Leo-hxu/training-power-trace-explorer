@@ -3,7 +3,7 @@
   "source_family": "PowerTraces",
   "discovered_traces": 1116,
   "successfully_normalized": 1116,
-  "published_runs": 10,
+  "published_runs": 11,
   "excluded_runs": 1106,
   "selection_policy": "One PASS_MAIN run nearest 30 minutes per observed model-family and GPU-type stratum, plus one additional nearest-30-minute run.",
   "exclusions": [
@@ -20,5 +20,7 @@
     "absolute_source_paths_included": false,
     "training_logs_included": false,
     "slurm_files_included": false
-  }
+  },
+  "synthetic_showcase_runs": 1,
+  "synthetic_showcase_policy": "One deterministic, clearly labeled full-telemetry trace is included solely to demonstrate the interface; it is not counted as reviewed research data."
 }
