@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PowerChart } from "../app/components/PowerChart";
 import { EmptyState, FormatValue, LoadingBlock, QualityBadge } from "../app/components/Ui";
+import { withComputedTotalPower } from "../app/lib/power-series";
 import type { Run, Sample } from "../app/lib/types";
 import { loadCatalog, loadRun, publicArtifactUrl, type PublicRun, type PublicRunDetail } from "./public-data";
 
@@ -122,15 +123,26 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
 function smoothSamples(samples: Sample[], windowS: number) {
   if (!windowS) return samples;
   const byGpu = new Map<string, Sample[]>();
-  samples.forEach((sample) => byGpu.set(sample.gpu_id, [...(byGpu.get(sample.gpu_id) ?? []), sample]));
+  samples.forEach((sample) => {
+    const rows = byGpu.get(sample.gpu_id);
+    if (rows) rows.push(sample);
+    else byGpu.set(sample.gpu_id, [sample]);
+  });
   const result: Sample[] = [];
-  byGpu.forEach((rows) => rows.forEach((row, index) => {
-    const window = rows.slice(0, index + 1).filter((candidate) => candidate.time_relative_s >= row.time_relative_s - windowS);
-    result.push({ ...row, power_w: window.reduce((sum, candidate) => sum + candidate.power_w, 0) / window.length });
-  }));
-  const totals = new Map<number, number>();
-  result.forEach((row) => totals.set(row.time_relative_s, (totals.get(row.time_relative_s) ?? 0) + row.power_w));
-  return result.map((row) => ({ ...row, total_power_w: totals.get(row.time_relative_s) }));
+  byGpu.forEach((rows) => {
+    const ordered = [...rows].sort((left, right) => left.time_relative_s - right.time_relative_s);
+    let start = 0;
+    let sum = 0;
+    ordered.forEach((row, index) => {
+      sum += row.power_w;
+      while (ordered[start].time_relative_s < row.time_relative_s - windowS) {
+        sum -= ordered[start].power_w;
+        start += 1;
+      }
+      result.push({ ...row, power_w: sum / (index - start + 1) });
+    });
+  });
+  return withComputedTotalPower(result);
 }
 
 function MetadataCard({ title, items }: { title: string; items: [string, ReactNode][] }) {
@@ -145,10 +157,10 @@ function downloadText(filename: string, content: string, type: string) {
 }
 
 function Detail({ detail }: { detail: PublicRunDetail }) {
-  const { run, samples: raw } = detail;
+  const { run } = detail;
   const [smoothing, setSmoothing] = useState(0);
-
-  const samples = smoothSamples(raw, smoothing);
+  const raw = useMemo(() => withComputedTotalPower(detail.samples), [detail.samples]);
+  const samples = useMemo(() => smoothSamples(raw, smoothing), [raw, smoothing]);
   const stages: { time_relative_s: number; stage: string }[] = [];
   let lastStage = "";
   raw.forEach((sample) => { if (sample.stage && sample.stage !== lastStage) { stages.push({ time_relative_s: sample.time_relative_s, stage: sample.stage }); lastStage = sample.stage; } });
@@ -175,7 +187,8 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
 }
 
 function RawData({ detail }: { detail: PublicRunDetail }) {
-  const { run, samples: all } = detail;
+  const { run } = detail;
+  const all = useMemo(() => withComputedTotalPower(detail.samples), [detail.samples]);
   const runId = run.run_id;
   const [gpu, setGpu] = useState("All");
   const [search, setSearch] = useState("");
@@ -243,4 +256,3 @@ export function StaticDemoApp() {
   }
   return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">Training Power Trace Explorer · Reviewed public research data · <a href={REPOSITORY_URL}>Source on GitHub</a></footer></div>;
 }
-

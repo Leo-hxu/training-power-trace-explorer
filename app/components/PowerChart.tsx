@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Sample } from "../lib/types";
+import { totalPowerSeries } from "../lib/power-series";
 
 const COLORS = ["#2563eb", "#0f9f6e", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#65a30d", "#ea580c"];
 const TOTAL_COLOR = "#172033";
@@ -45,14 +46,10 @@ export function PowerChart({
   const series = useMemo(() => {
     const map = new Map<string, Point[]>();
     for (const gpu of gpuIds) map.set(`GPU ${gpu}`, []);
-    const totals = new Map<number, Point>();
     for (const sample of samples) {
       map.get(`GPU ${sample.gpu_id}`)?.push({ ...sample, name: `GPU ${sample.gpu_id}`, y: sample.power_w });
-      if (sample.total_power_w !== undefined && !totals.has(sample.time_relative_s)) {
-        totals.set(sample.time_relative_s, { ...sample, name: "Total", y: sample.total_power_w });
-      }
     }
-    map.set("Total", Array.from(totals.values()).sort((a, b) => a.time_relative_s - b.time_relative_s));
+    map.set("Total", totalPowerSeries(samples).map((sample) => ({ ...sample, name: "Total", y: sample.power_w })));
     for (const points of map.values()) points.sort((a, b) => a.time_relative_s - b.time_relative_s);
     return map;
   }, [samples, gpuIds]);
@@ -280,4 +277,3 @@ export function PowerChart({
     </div>
   );
 }
-
