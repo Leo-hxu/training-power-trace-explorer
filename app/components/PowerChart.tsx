@@ -15,8 +15,41 @@ function fmt(value: number | null | undefined, suffix: string, digits = 1) {
 }
 
 function niceMax(value: number) {
-  const exponent = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
-  return Math.ceil(value / exponent) * exponent;
+  const roughStep = Math.max(value, 1) / 5;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const normalized = roughStep / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  return Math.ceil(value / (step * magnitude)) * step * magnitude;
+}
+
+/**
+ * At a wide zoom level, many 100 ms measurements map to the same canvas
+ * pixel. Averaging the points in each horizontal bucket keeps the overview
+ * readable without changing the full-resolution data used by zoom and hover.
+ */
+function downsampleVisiblePoints(points: Point[], range: Range, maxPoints: number) {
+  const visible = points.filter((point) => point.time_relative_s >= range[0] && point.time_relative_s <= range[1]);
+  if (visible.length <= maxPoints) return visible;
+
+  const width = Math.max(0.000001, range[1] - range[0]);
+  const buckets = new Map<number, { point: Point; count: number; time: number; power: number }>();
+  for (const point of visible) {
+    const index = Math.min(maxPoints - 1, Math.floor(((point.time_relative_s - range[0]) / width) * maxPoints));
+    const bucket = buckets.get(index);
+    if (bucket) {
+      bucket.count += 1;
+      bucket.time += point.time_relative_s;
+      bucket.power += point.y;
+    } else {
+      buckets.set(index, { point, count: 1, time: point.time_relative_s, power: point.y });
+    }
+  }
+
+  return [...buckets.values()].map(({ point, count, time, power }) => ({
+    ...point,
+    time_relative_s: time / count,
+    y: power / count,
+  }));
 }
 
 export function PowerChart({
@@ -158,13 +191,13 @@ export function PowerChart({
     Array.from(series.entries()).forEach(([name, points], seriesIndex) => {
       if (hidden.has(name) || points.length < 2) return;
       const color = name === "Total" ? TOTAL_COLOR : COLORS[seriesIndex % COLORS.length];
+      const plottedPoints = downsampleVisiblePoints(points, xRange, Math.max(240, Math.round(plotWidth * 1.5)));
       context.strokeStyle = color;
       context.lineWidth = name === "Total" ? 2.5 : 1.55;
       context.globalAlpha = name === "Total" ? 1 : 0.78;
       context.beginPath();
       let drawing = false;
-      for (const point of points) {
-        if (point.time_relative_s < xRange[0] || point.time_relative_s > xRange[1]) continue;
+      for (const point of plottedPoints) {
         const x = sx(point.time_relative_s);
         const y = sy(point.y);
         if (!drawing) { context.moveTo(x, y); drawing = true; } else context.lineTo(x, y);
