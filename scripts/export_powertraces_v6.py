@@ -63,8 +63,13 @@ def choose_public_runs(runs: pd.DataFrame, samples_dir: Path) -> pd.DataFrame:
     candidates["trace_key"] = candidates.aggregate_trace_path.str.extract(r"([0-9a-f]{16})")
     candidates["source_bytes"] = candidates.trace_key.map(lambda key: (samples_dir / f"{key}.parquet").stat().st_size)
     candidates["sample_rows"] = candidates.trace_key.map(lambda key: len(pd.read_parquet(samples_dir / f"{key}.parquet", columns=["gpu_id"])))
-    return (candidates.sort_values(["model_family", "gpu_type", "source_bytes", "maximum_gap_s", "run_id"])
-            .groupby(["model_family", "gpu_type"], as_index=False).first())
+    candidates["duration_distance_s"] = (candidates["physical_duration_s"] - 1800.0).abs()
+    stratified = (candidates.sort_values(["model_family", "gpu_type", "duration_distance_s", "maximum_gap_s", "run_id"])
+                  .groupby(["model_family", "gpu_type"], as_index=False).first())
+    extra = (candidates[~candidates.run_id.isin(stratified.run_id)]
+             .sort_values(["duration_distance_s", "maximum_gap_s", "run_id"])
+             .head(1))
+    return pd.concat([stratified, extra], ignore_index=True)
 
 
 def build_samples(frame: pd.DataFrame, public_run_id: str) -> pd.DataFrame:
@@ -198,7 +203,7 @@ def main() -> None:
     audit = {
         "schema_version": 1, "source_family": "PowerTraces", "discovered_traces": 1116,
         "successfully_normalized": 1116, "published_runs": len(catalog), "excluded_runs": 1116-len(catalog),
-        "selection_policy": "One smallest PASS_MAIN run per observed model-family and GPU-type stratum.",
+        "selection_policy": "One PASS_MAIN run nearest 30 minutes per observed model-family and GPU-type stratum, plus one additional nearest-30-minute run.",
         "exclusions": [
             {"reason": "not_selected_by_publication_policy", "count": int(len(power_runs[power_runs.quality_status == "PASS_MAIN"]) - len(catalog))},
             {"reason": "quality_status_not_PASS_MAIN", "count": int(len(power_runs[power_runs.quality_status != "PASS_MAIN"]))},
