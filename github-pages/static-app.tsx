@@ -25,9 +25,9 @@ function Header() {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <a href="#/" className="brand-link" aria-label="Training Power Trace Explorer home">
+        <a href="#/" className="brand-link" aria-label="LLM Power Trace Explorer home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-          <span><strong>Training Power Trace Explorer</strong><small>LLM Systems Research</small></span>
+          <span><strong>LLM Power Trace Explorer</strong><small>Training &amp; Inference Research</small></span>
         </a>
         <nav className="header-actions">
           <span className="static-demo-badge"><i /> Public reference &amp; demo data</span>
@@ -56,28 +56,35 @@ function modelLabel(run: Pick<Run, "model" | "model_metadata_status">) {
   return run.model_metadata_status === "not_reported" ? "Unknown" : run.model;
 }
 
+function workloadLabel(run: Pick<Run, "workload_type">) {
+  return run.workload_type === "Inference" ? "Inference" : "Training";
+}
+
+const workloadTypes = ["Training", "Inference"];
+
 function Home({ catalog }: { catalog: PublicRun[] }) {
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState("All");
+  const [workload, setWorkload] = useState("All");
   const [gpu, setGpu] = useState("All");
   const [model, setModel] = useState("All");
   const [method, setMethod] = useState("All");
   const [quality, setQuality] = useState("All");
   const runs = useMemo(() => catalog.filter((run) => {
     const needle = search.trim().toLowerCase();
-    const matchesSearch = !needle || [run.run_id, modelLabel(run), run.model_source_label, run.gpu_type, run.method, run.source_family].some((value) => String(value ?? "").toLowerCase().includes(needle));
+    const matchesSearch = !needle || [run.run_id, workloadLabel(run), modelLabel(run), run.model_source_label, run.gpu_type, run.method, run.source_family].some((value) => String(value ?? "").toLowerCase().includes(needle));
     return matchesSearch
-      && (source === "All" || run.source_family === source)
+      && (workload === "All" || workloadLabel(run) === workload)
       && (gpu === "All" || run.gpu_type === gpu)
       && (model === "All" || modelLabel(run) === model)
       && (method === "All" || run.method === method)
       && (quality === "All" || run.quality_status === quality);
-  }), [catalog, search, source, gpu, model, method, quality]);
+  }), [catalog, search, workload, gpu, model, method, quality]);
 
   function options(field: keyof Run) {
     return Array.from(new Set(catalog.map((run) => String(run[field])))).sort();
   }
-  function clear() { setSearch(""); setSource("All"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All"); }
+  function clear() { setSearch(""); setWorkload("All"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All"); }
+  const publishedWorkloads = Array.from(new Set(catalog.map(workloadLabel))).sort();
 
   return (
     <div className="dashboard-layout static-dashboard">
@@ -86,10 +93,10 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
         <label className="search-field"><span className="sr-only">Search traces</span><i>⌕</i><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Run ID, model, GPU…" /></label>
         <div className="filter-stack">
           {[
-            ["Source family", source, setSource, options("source_family")],
+            ["Workload type", workload, setWorkload, workloadTypes],
             ["GPU type", gpu, setGpu, options("gpu_type")],
             ["Model", model, setModel, Array.from(new Set(catalog.map(modelLabel))).sort()],
-            ["Training method", method, setMethod, options("method")],
+            ["Execution method", method, setMethod, options("method")],
             ["Quality status", quality, setQuality, options("quality_status")],
           ].map(([label, value, setter, values]) => (
             <label className="filter-field" key={String(label)}><span>{String(label)}</span><select value={String(value)} onChange={(event) => (setter as (value: string) => void)(event.target.value)}><option>All</option>{(values as string[]).map((option) => <option key={option}>{option}</option>)}</select></label>
@@ -101,23 +108,23 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
       <main className="catalog-main">
         <PublicDataNotice />
         <section className="page-intro">
-          <div><p className="eyebrow">Power telemetry catalog</p><h1>Training Power Trace Explorer</h1><p>Interactive visualization and metadata browser for LLM training GPU power traces.</p></div>
+          <div><p className="eyebrow">Power telemetry catalog</p><h1>LLM Power Trace Explorer</h1><p>Interactive visualization and metadata browser for LLM training and inference GPU power traces.</p></div>
           <a className="text-link" href="#/about">Metric definitions →</a>
         </section>
         <section className="catalog-stats">
           <div><span>Published traces</span><strong>{catalog.length}</strong><small>public reference runs</small></div>
           <div><span>Current matches</span><strong>{runs.length}</strong><small>after active filters</small></div>
           <div><span>GPU families</span><strong>{options("gpu_type").length}</strong><small>{options("gpu_type").join(" · ")}</small></div>
-          <div><span>Schemas</span><strong>1</strong><small>PowerTraces</small></div>
+          <div><span>Workload types</span><strong>{publishedWorkloads.length}</strong><small>{publishedWorkloads.join(" · ")}</small></div>
         </section>
         <section className="catalog-card">
           <div className="table-toolbar"><div><h2>Trace catalog</h2><p>{runs.length} public traces shown</p></div><div className="legend-inline"><QualityBadge status="PASS_MAIN" /></div></div>
           <div className="table-scroll">
             <table className="trace-table">
-              <thead><tr><th>Run ID</th><th>Source</th><th>Model</th><th>Method</th><th>GPU</th><th>GPU Count</th><th>Seq Len</th><th>Microbatch</th><th>Grad Accum</th><th>Duration</th><th>Median Δt</th><th>Mean Power</th><th>P99 Power</th><th>R99 Up 1s</th><th>Energy</th><th>Quality</th><th /></tr></thead>
+              <thead><tr><th>Run ID</th><th>Workload</th><th>Source</th><th>Model</th><th>Method</th><th>GPU</th><th>GPU Count</th><th>Seq Len</th><th>Microbatch</th><th>Grad Accum</th><th>Duration</th><th>Median Δt</th><th>Mean Power</th><th>P99 Power</th><th>R99 Up 1s</th><th>Energy</th><th>Quality</th><th /></tr></thead>
               <tbody>{runs.map((run) => <tr key={run.run_id} onClick={() => { window.location.hash = `/runs/${run.run_id}`; }} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") window.location.hash = `/runs/${run.run_id}`; }}>
                 <td><strong className="run-id">{run.run_id}</strong><small>canonical_power_trace.csv</small></td>
-                <td><span className="source-chip">{run.source_family}</span></td><td>{modelLabel(run)}</td><td>{run.method}</td><td>{run.gpu_type}</td><td>{run.gpu_count}</td><td>{run.sequence_length}</td><td>{run.microbatch_size}</td><td>{run.grad_accum_steps}</td><td>{fmtSeconds(run.duration_observed_s)}</td><td><FormatValue value={run.sampling_interval_observed_median_s} suffix=" s" digits={3} /></td><td><FormatValue value={run.mean_total_power_w} suffix=" W" /></td><td><FormatValue value={run.p99_total_power_w} suffix=" W" /></td><td><FormatValue value={run.ramp_up_p99_1s_w_per_s} suffix=" W/s" /></td><td><FormatValue value={run.total_energy_wh} suffix=" Wh" digits={2} /></td><td><QualityBadge status={run.quality_status} /></td><td><span className="row-arrow">→</span></td>
+                <td>{workloadLabel(run)}</td><td><span className="source-chip">{run.source_family}</span></td><td>{modelLabel(run)}</td><td>{run.method}</td><td>{run.gpu_type}</td><td>{run.gpu_count}</td><td>{run.sequence_length}</td><td>{run.microbatch_size}</td><td>{run.grad_accum_steps}</td><td>{fmtSeconds(run.duration_observed_s)}</td><td><FormatValue value={run.sampling_interval_observed_median_s} suffix=" s" digits={3} /></td><td><FormatValue value={run.mean_total_power_w} suffix=" W" /></td><td><FormatValue value={run.p99_total_power_w} suffix=" W" /></td><td><FormatValue value={run.ramp_up_p99_1s_w_per_s} suffix=" W/s" /></td><td><FormatValue value={run.total_energy_wh} suffix=" Wh" digits={2} /></td><td><QualityBadge status={run.quality_status} /></td><td><span className="row-arrow">→</span></td>
               </tr>)}</tbody>
             </table>
           </div>
@@ -185,7 +192,7 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
   return <main className="detail-main static-detail">
     <PublicDataNotice />
     <div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>{run.run_id}</span></div>
-    <section className="run-heading"><div><p className="eyebrow">{synthetic ? "Synthetic showcase trace" : "Public trace detail"}</p><h1>Run: {run.run_id}</h1><div className="run-badges">{[run.gpu_type, modelLabel(run), run.method, `Seq ${run.sequence_length}`, run.source_family].map((badge) => <span key={badge}>{badge}</span>)}<QualityBadge status={run.quality_status} /></div></div><div className="heading-actions"><a className="button button-secondary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><a className="button button-primary" href={publicArtifactUrl(run.raw_csv_file_id)} download>↓ Download CSV</a></div></section>
+    <section className="run-heading"><div><p className="eyebrow">{synthetic ? "Synthetic showcase trace" : "Public trace detail"}</p><h1>Run: {run.run_id}</h1><div className="run-badges">{[workloadLabel(run), run.gpu_type, modelLabel(run), run.method, `Seq ${run.sequence_length}`, run.source_family].map((badge) => <span key={badge}>{badge}</span>)}<QualityBadge status={run.quality_status} /></div></div><div className="heading-actions"><a className="button button-secondary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><a className="button button-primary" href={publicArtifactUrl(run.raw_csv_file_id)} download>↓ Download CSV</a></div></section>
     <div className="detail-grid">
       <section className="plot-card static-plot-card">
         <div className="panel-heading plot-heading"><div><p className="eyebrow">Canonical normalized telemetry</p><h2>GPU power over time</h2><p>{samples.length.toLocaleString()} plotted samples · scroll to zoom, drag to pan</p></div><div className="plot-controls"><label><span>Smoothing</span><select value={smoothing} onChange={(event) => setSmoothing(Number(event.target.value))}><option value="0">Raw</option><option value="1">Rolling 1 s</option><option value="5">Rolling 5 s</option><option value="10">Rolling 10 s</option></select></label></div></div>
@@ -194,8 +201,8 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
       </section>
       <aside className="metadata-panel">
         <div className="metadata-title"><div><p className="eyebrow">Run record</p><h2>Metadata</h2></div><span>{raw.length} samples</span></div>
-        <MetadataCard title="Run Identity" items={[["Run ID", run.run_id], ["Source family", run.source_family], ["Trace path", <code key="trace">{run.trace_path}</code>], ["Data status", synthetic ? "Illustrative synthetic telemetry (not measured)" : "Reviewed public export"]]} />
-        <MetadataCard title="Model and Training" items={modelItems} />
+        <MetadataCard title="Run Identity" items={[["Run ID", run.run_id], ["Workload type", workloadLabel(run)], ["Source family", run.source_family], ["Trace path", <code key="trace">{run.trace_path}</code>], ["Data status", synthetic ? "Illustrative synthetic telemetry (not measured)" : "Reviewed public export"]]} />
+        <MetadataCard title="Model and Execution" items={modelItems} />
         <MetadataCard title="Hardware and Logging" items={[["GPU type", run.gpu_type], ["GPU count", run.gpu_count], ["Parallelism", run.parallelism], ["Median interval", `${run.sampling_interval_observed_median_s} s`], ["Clock telemetry", run.has_clock_telemetry ? "Available" : "Not found"], ["Utilization telemetry", run.has_utilization_telemetry ? "Available" : "Not found"], ["Memory telemetry", raw.some((sample) => sample.memory_used_mb != null) ? "Available" : "Not found"], ["Temperature telemetry", run.has_temperature_telemetry ? "Available" : "Not found"], ["Stage labels", run.has_stage_labels ? "Available" : "Not found"]]} />
         <MetadataCard title="Power Metrics" items={[["Mean total power", `${run.mean_total_power_w} W`], ["P99 total power", `${run.p99_total_power_w} W`], ["Max total power", `${run.max_total_power_w} W`], ["Total energy", `${run.total_energy_wh} Wh`], ["R99 upward ramp", `${run.ramp_up_p99_1s_w_per_s} W/s`]]} />
         <div className="metadata-actions"><a className="button button-primary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><button className="button button-secondary" onClick={() => downloadText(`${run.run_id}_metadata.json`, JSON.stringify(run, null, 2), "application/json")}>↓ Metadata JSON</button><a className="button button-ghost" href="#/">← Back to Trace List</a></div>
@@ -218,7 +225,7 @@ function RawData({ detail }: { detail: PublicRunDetail }) {
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const columns: [keyof Sample, string, string][] = [["timestamp", "Time", ""], ["time_relative_s", "Relative Time", "s"], ["gpu_id", "GPU ID", ""], ["power_w", "Power", "W"], ["total_power_w", "Total Power", "W"], ["gpu_util_pct", "GPU Util", "%"], ["memory_util_pct", "Memory Util", "%"], ["memory_used_mb", "Memory Used", "MB"], ["sm_clock_mhz", "SM Clock", "MHz"], ["temperature_c", "Temperature", "°C"]];
-  return <main className="raw-main static-raw"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><a href={`#/runs/${runId}`}>{runId}</a><span>/</span><span>Raw Data</span></div><section className="raw-heading"><div><p className="eyebrow">Canonical normalized samples</p><h1>Raw Trace Data</h1><p>{modelLabel(run)} · {run.gpu_type} · {synthetic ? "synthetic illustrative data" : "reviewed public data"}</p></div><div className="heading-actions"><a className="button button-secondary" href={`#/runs/${runId}`}>← Back to Trace</a></div></section>
+  return <main className="raw-main static-raw"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><a href={`#/runs/${runId}`}>{runId}</a><span>/</span><span>Raw Data</span></div><section className="raw-heading"><div><p className="eyebrow">Canonical normalized samples</p><h1>Raw Trace Data</h1><p>{workloadLabel(run)} · {modelLabel(run)} · {run.gpu_type} · {synthetic ? "synthetic illustrative data" : "reviewed public data"}</p></div><div className="heading-actions"><a className="button button-secondary" href={`#/runs/${runId}`}>← Back to Trace</a></div></section>
     <section className="raw-controls"><label className="search-field raw-search"><span className="sr-only">Search</span><i>⌕</i><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search any displayed value…" /></label><label><span>GPU</span><select value={gpu} onChange={(event) => { setGpu(event.target.value); setPage(1); }}><option>All</option>{Array.from(new Set(all.map((row) => row.gpu_id))).map((id) => <option key={id} value={id}>GPU {id}</option>)}</select></label></section>
     <section className="raw-table-card"><div className="table-toolbar"><div><h2>Samples</h2><p>{filtered.length.toLocaleString()} matching rows · page {page} of {pages}</p></div></div><div className="table-scroll raw-scroll"><table className="trace-table raw-table"><thead><tr>{columns.map(([, label]) => <th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.timestamp}-${row.gpu_id}-${index}`}>{columns.map(([key,,unit]) => <td key={key} className={key === "timestamp" ? "timestamp-cell" : "numeric-cell"}>{String(row[key] ?? "Not found")}{unit && row[key] != null ? ` ${unit}` : ""}</td>)}</tr>)}</tbody></table></div><div className="pagination"><button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>‹ Previous</button><span>Page <strong>{page}</strong> of <strong>{pages}</strong></span><button onClick={() => setPage(Math.min(pages, page + 1))} disabled={page === pages}>Next ›</button></div></section>
   </main>;
@@ -273,5 +280,5 @@ export function StaticDemoApp() {
     else if (runMatch) page = <RunRoute catalog={catalog} runId={decodeURIComponent(runMatch[1])} rawData={false} />;
     else page = <NotFound />;
   }
-  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">Training Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a></footer></div>;
+  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">LLM Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a></footer></div>;
 }

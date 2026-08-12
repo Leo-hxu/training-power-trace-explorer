@@ -110,6 +110,7 @@ const meanTotal = totals.reduce((sum, value) => sum + value, 0) / totals.length;
 
 const run = {
   run_id: runId,
+  workload_type: "Training",
   source_family: "Synthetic showcase",
   source_directory: "Illustrative deterministic telemetry; not a measured research run",
   trace_path: `raw/${runId}.csv`,

@@ -6,6 +6,8 @@ export type QualityFlag = {
 
 export type Run = {
   run_id: string;
+  /** The workload being measured; legacy records without this field are training runs. */
+  workload_type?: "Training" | "Inference";
   source_family: string;
   source_directory: string;
   trace_path: string;

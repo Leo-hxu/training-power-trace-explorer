@@ -131,7 +131,7 @@ def build_run(row: pd.Series, public_run_id: str, samples: pd.DataFrame, aggrega
     duration_declared = number(row.get("duration_declared_s")) / 60 if scalar(row.get("duration_declared_s")) != "Unknown" else "Unknown"
     quality_flags = [{"code": "missing_optional_fields", "severity": "info", "message": "Optional telemetry or metadata fields are unavailable in the reviewed source."}] if missing else []
     return {
-        "run_id": public_run_id, "source_family": "PowerTraces", "source_directory": "Public v6 reviewed export",
+        "run_id": public_run_id, "workload_type": "Training", "source_family": "PowerTraces", "source_directory": "Public v6 reviewed export",
         "trace_path": f"raw/{public_run_id}.csv", "stdout_path": None, "stderr_path": None, "plot_path": None,
         "meta_path": f"metadata/{public_run_id}.json", "model": model,
         "model_source_label": model_source_label, "model_metadata_status": model_metadata_status,
