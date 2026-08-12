@@ -32,6 +32,11 @@ jobs:
 
       - name: Build static site
         run: npm run build:pages
+        env:
+          # Both values are intentionally public client configuration. The API
+          # key must be restricted to this GitHub Pages referrer in Google Cloud.
+          VITE_GOOGLE_DRIVE_API_KEY: ${{ vars.GOOGLE_DRIVE_API_KEY }}
+          VITE_GOOGLE_DRIVE_CATALOG_FILE_ID: ${{ vars.GOOGLE_DRIVE_CATALOG_FILE_ID }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

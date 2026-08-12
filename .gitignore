@@ -46,3 +46,6 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# Public trace records are served from Google Drive, never from GitHub Pages.
+/github-pages/public-data/
