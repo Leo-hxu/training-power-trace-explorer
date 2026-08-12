@@ -15,6 +15,8 @@ export type Run = {
   meta_path?: string | null;
   model: string;
   model_family: string;
+  model_source_label?: string;
+  model_metadata_status?: "reported" | "not_reported";
   method: string;
   gpu_type: string;
   gpu_count: string | number;
@@ -76,4 +78,3 @@ export type Sample = {
 };
 
 export type Filters = Record<string, string[]>;
-

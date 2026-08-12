@@ -110,9 +110,19 @@ def ramp_event_frequency(aggregate: pd.DataFrame) -> float:
     return float(np.count_nonzero(upward >= threshold) / duration_min)
 
 
+def public_model_fields(row: pd.Series) -> tuple[str, str, str]:
+    """Do not present source variants or short labels as verified model names."""
+    variant = scalar(row.get("model_variant"))
+    source_label = scalar(row.get("model_family"))
+    if str(variant).strip().lower() in {"", "unknown", "base", "chat"}:
+        return "Unknown", source_label, "not_reported"
+    return str(variant), source_label, "reported"
+
+
 def build_run(row: pd.Series, public_run_id: str, samples: pd.DataFrame, aggregate: pd.DataFrame) -> dict[str, Any]:
+    model, model_source_label, model_metadata_status = public_model_fields(row)
     missing = [name for name, source in {
-        "model": row.get("model_variant"), "precision": row.get("launcher_mixed_precision"),
+        "model": model if model_metadata_status == "reported" else "Unknown", "precision": row.get("launcher_mixed_precision"),
         "parallelism": None, "dataset_name": row.get("dataset_name"),
         "memory_used_mb": None, "memory_total_mb": None, "stage": None,
     }.items() if scalar(source) == "Unknown"]
@@ -123,7 +133,8 @@ def build_run(row: pd.Series, public_run_id: str, samples: pd.DataFrame, aggrega
     return {
         "run_id": public_run_id, "source_family": "PowerTraces", "source_directory": "Public v6 reviewed export",
         "trace_path": f"raw/{public_run_id}.csv", "stdout_path": None, "stderr_path": None, "plot_path": None,
-        "meta_path": f"metadata/{public_run_id}.json", "model": scalar(row.get("model_variant")),
+        "meta_path": f"metadata/{public_run_id}.json", "model": model,
+        "model_source_label": model_source_label, "model_metadata_status": model_metadata_status,
         "model_family": scalar(row.get("model_family")), "method": scalar(row.get("training_method")),
         "gpu_type": scalar(row.get("gpu_type")), "gpu_count": scalar(row.get("gpu_count")),
         "precision": scalar(row.get("launcher_mixed_precision")), "compute_dtype": scalar(row.get("compute_dtype")),
