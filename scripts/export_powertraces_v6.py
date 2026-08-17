@@ -111,12 +111,12 @@ def ramp_event_frequency(aggregate: pd.DataFrame) -> float:
 
 
 def public_model_fields(row: pd.Series) -> tuple[str, str, str]:
-    """Do not present source variants or short labels as verified model names."""
-    variant = scalar(row.get("model_variant"))
+    """Prefer the audited full repository identifier over a source variant label."""
+    model_repo = scalar(row.get("model_repo"))
     source_label = scalar(row.get("model_family"))
-    if str(variant).strip().lower() in {"", "unknown", "base", "chat"}:
-        return "Unknown", source_label, "not_reported"
-    return str(variant), source_label, "reported"
+    if str(model_repo).strip().lower() not in {"", "unknown"}:
+        return str(model_repo), source_label, "reported"
+    return "Unknown", source_label, "not_reported"
 
 
 def build_run(row: pd.Series, public_run_id: str, samples: pd.DataFrame, aggregate: pd.DataFrame) -> dict[str, Any]:
