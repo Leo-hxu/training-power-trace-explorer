@@ -64,7 +64,7 @@ const workloadTypes = ["Training", "Inference"];
 
 function Home({ catalog }: { catalog: PublicRun[] }) {
   const [search, setSearch] = useState("");
-  const [workload, setWorkload] = useState("All");
+  const [workload, setWorkload] = useState("Training");
   const [gpu, setGpu] = useState("All");
   const [model, setModel] = useState("All");
   const [method, setMethod] = useState("All");
@@ -107,7 +107,12 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
   }), [arrivalPattern, arrivalRate, catalog, gpu, gpuFrequency, inFlightRequests, inferenceView, kvCacheQuantization, method, model, quality, search, tensorParallel, weightQuantization, workload]);
 
   function clear() {
-    setSearch(""); setWorkload("All"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All");
+    setSearch(""); setWorkload("Training"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All");
+    setTensorParallel("All"); setKvCacheQuantization("All"); setWeightQuantization("All"); setGpuFrequency("All");
+    setInFlightRequests("All"); setArrivalPattern("All"); setArrivalRate("All");
+  }
+  function selectWorkload(value: string) {
+    setWorkload(value); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All");
     setTensorParallel("All"); setKvCacheQuantization("All"); setWeightQuantization("All"); setGpuFrequency("All");
     setInFlightRequests("All"); setArrivalPattern("All"); setArrivalRate("All");
   }
@@ -137,7 +142,7 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
         <div className="sidebar-heading"><div><p className="eyebrow">Catalog controls</p><h2>Filter traces</h2></div><span className="count-pill">{runs.length}</span></div>
         <label className="search-field"><span className="sr-only">Search traces</span><i>⌕</i><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Run ID, model, GPU…" /></label>
         <div className="filter-stack">
-          <label className="filter-field"><span>Workload type</span><select value={workload} onChange={(event) => setWorkload(event.target.value)}><option>All</option>{workloadTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="filter-field"><span>Workload type</span><select value={workload} onChange={(event) => selectWorkload(event.target.value)}>{workloadTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
           {filterSpecs.map(([label, value, setter, values]) => (
             <label className="filter-field" key={label}><span>{label}</span><select value={value} onChange={(event) => setter(event.target.value)}><option>All</option>{values.map((option) => <option key={option}>{option}</option>)}</select></label>
           ))}
@@ -158,7 +163,7 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
           <div><span>Workload types</span><strong>{publishedWorkloads.length}</strong><small>{publishedWorkloads.join(" · ")}</small></div>
         </section>
         <section className="catalog-card">
-          <div className="table-toolbar"><div><h2>Trace catalog</h2><p>{runs.length} public traces shown</p></div><div className="legend-inline"><QualityBadge status="PASS_MAIN" /></div></div>
+          <div className="table-toolbar"><div><h2>Trace catalog</h2><p>{runs.length} public traces shown</p></div><div className="legend-inline"><QualityBadge status={inferenceView ? "DEMO_SYNTHETIC" : "PASS_MAIN"} /></div></div>
           <div className="table-scroll">
             <table className="trace-table">
               {inferenceView ? <>
