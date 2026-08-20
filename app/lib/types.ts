@@ -62,6 +62,18 @@ export type Run = {
   gpu_count_mismatch?: boolean;
   duplicate_warning?: boolean;
   ramp_metrics?: Record<string, Record<string, number | null>>;
+  /** Inference-serving sweep metadata; omitted for training-only records. */
+  tensor_parallel_size?: string | number;
+  kv_cache_quantization?: string;
+  model_weight_quantization?: string;
+  gpu_frequency_mhz?: string | number;
+  in_flight_requests?: string | number;
+  concurrency?: string | number;
+  arrival_pattern?: string;
+  arrival_rate_rps?: string | number | null;
+  arrival_rate_label?: string;
+  inference_engine?: string;
+  prompt_profile?: string;
 };
 
 export type Sample = {

@@ -43,7 +43,7 @@ function PublicDataNotice() {
   return (
     <div className="demo-notice">
       <span>Public reference data</span>
-      <p>Reviewed public traces are research-ready; the separately labeled synthetic showcase demonstrates complete telemetry. Private HPC files remain outside this deployment.</p>
+      <p>Reviewed public traces are research-ready; separately labeled synthetic showcases demonstrate complete training and inference telemetry. Private HPC files remain outside this deployment.</p>
     </div>
   );
 }
@@ -69,22 +69,67 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
   const [model, setModel] = useState("All");
   const [method, setMethod] = useState("All");
   const [quality, setQuality] = useState("All");
+  const [tensorParallel, setTensorParallel] = useState("All");
+  const [kvCacheQuantization, setKvCacheQuantization] = useState("All");
+  const [weightQuantization, setWeightQuantization] = useState("All");
+  const [gpuFrequency, setGpuFrequency] = useState("All");
+  const [inFlightRequests, setInFlightRequests] = useState("All");
+  const [arrivalPattern, setArrivalPattern] = useState("All");
+  const [arrivalRate, setArrivalRate] = useState("All");
+  const inferenceView = workload === "Inference";
+
+  function options(field: keyof Run, inferenceOnly = false) {
+    return Array.from(new Set(catalog
+      .filter((run) => !inferenceOnly || workloadLabel(run) === "Inference")
+      .map((run) => run[field])
+      .filter((value) => value !== undefined && value !== null && value !== "")
+      .map(String))).sort();
+  }
+
   const runs = useMemo(() => catalog.filter((run) => {
     const needle = search.trim().toLowerCase();
     const matchesSearch = !needle || [run.run_id, workloadLabel(run), modelLabel(run), run.model_source_label, run.gpu_type, run.method, run.source_family].some((value) => String(value ?? "").toLowerCase().includes(needle));
-    return matchesSearch
-      && (workload === "All" || workloadLabel(run) === workload)
-      && (gpu === "All" || run.gpu_type === gpu)
+    const matchesWorkload = workload === "All" || workloadLabel(run) === workload;
+    const matchesTraining = (gpu === "All" || run.gpu_type === gpu)
       && (model === "All" || modelLabel(run) === model)
       && (method === "All" || run.method === method)
       && (quality === "All" || run.quality_status === quality);
-  }), [catalog, search, workload, gpu, model, method, quality]);
+    const matchesInference = (gpu === "All" || run.gpu_type === gpu)
+      && (model === "All" || modelLabel(run) === model)
+      && (tensorParallel === "All" || String(run.tensor_parallel_size) === tensorParallel)
+      && (kvCacheQuantization === "All" || run.kv_cache_quantization === kvCacheQuantization)
+      && (weightQuantization === "All" || run.model_weight_quantization === weightQuantization)
+      && (gpuFrequency === "All" || String(run.gpu_frequency_mhz) === gpuFrequency)
+      && (inFlightRequests === "All" || String(run.in_flight_requests ?? run.concurrency) === inFlightRequests)
+      && (arrivalPattern === "All" || run.arrival_pattern === arrivalPattern)
+      && (arrivalRate === "All" || String(run.arrival_rate_label ?? run.arrival_rate_rps) === arrivalRate);
+    return matchesSearch && matchesWorkload && (inferenceView ? matchesInference : matchesTraining);
+  }), [arrivalPattern, arrivalRate, catalog, gpu, gpuFrequency, inFlightRequests, inferenceView, kvCacheQuantization, method, model, quality, search, tensorParallel, weightQuantization, workload]);
 
-  function options(field: keyof Run) {
-    return Array.from(new Set(catalog.map((run) => String(run[field])))).sort();
+  function clear() {
+    setSearch(""); setWorkload("All"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All");
+    setTensorParallel("All"); setKvCacheQuantization("All"); setWeightQuantization("All"); setGpuFrequency("All");
+    setInFlightRequests("All"); setArrivalPattern("All"); setArrivalRate("All");
   }
-  function clear() { setSearch(""); setWorkload("All"); setGpu("All"); setModel("All"); setMethod("All"); setQuality("All"); }
   const publishedWorkloads = Array.from(new Set(catalog.map(workloadLabel))).sort();
+  const filterSpecs: [string, string, (value: string) => void, string[]][] = inferenceView
+    ? [
+        ["Model", model, setModel, Array.from(new Set(catalog.filter((run) => workloadLabel(run) === "Inference").map(modelLabel))).sort()],
+        ["GPU", gpu, setGpu, options("gpu_type", true)],
+        ["TP number", tensorParallel, setTensorParallel, options("tensor_parallel_size", true)],
+        ["KV cache quantization", kvCacheQuantization, setKvCacheQuantization, options("kv_cache_quantization", true)],
+        ["Model weight quantization", weightQuantization, setWeightQuantization, options("model_weight_quantization", true)],
+        ["GPU frequency", gpuFrequency, setGpuFrequency, options("gpu_frequency_mhz", true)],
+        ["In-flight requests / concurrency", inFlightRequests, setInFlightRequests, Array.from(new Set(catalog.filter((run) => workloadLabel(run) === "Inference").map((run) => run.in_flight_requests ?? run.concurrency).filter((value) => value !== undefined && value !== null && value !== "").map(String))).sort()],
+        ["Arrival pattern", arrivalPattern, setArrivalPattern, options("arrival_pattern", true)],
+        ["Arrival rate", arrivalRate, setArrivalRate, Array.from(new Set(catalog.filter((run) => workloadLabel(run) === "Inference").map((run) => run.arrival_rate_label ?? run.arrival_rate_rps).filter((value) => value !== undefined && value !== null && value !== "").map(String))).sort()],
+      ]
+    : [
+        ["GPU type", gpu, setGpu, options("gpu_type")],
+        ["Model", model, setModel, Array.from(new Set(catalog.map(modelLabel))).sort()],
+        ["Execution method", method, setMethod, options("method")],
+        ["Quality status", quality, setQuality, options("quality_status")],
+      ];
 
   return (
     <div className="dashboard-layout static-dashboard">
@@ -92,18 +137,13 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
         <div className="sidebar-heading"><div><p className="eyebrow">Catalog controls</p><h2>Filter traces</h2></div><span className="count-pill">{runs.length}</span></div>
         <label className="search-field"><span className="sr-only">Search traces</span><i>⌕</i><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Run ID, model, GPU…" /></label>
         <div className="filter-stack">
-          {[
-            ["Workload type", workload, setWorkload, workloadTypes],
-            ["GPU type", gpu, setGpu, options("gpu_type")],
-            ["Model", model, setModel, Array.from(new Set(catalog.map(modelLabel))).sort()],
-            ["Execution method", method, setMethod, options("method")],
-            ["Quality status", quality, setQuality, options("quality_status")],
-          ].map(([label, value, setter, values]) => (
-            <label className="filter-field" key={String(label)}><span>{String(label)}</span><select value={String(value)} onChange={(event) => (setter as (value: string) => void)(event.target.value)}><option>All</option>{(values as string[]).map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="filter-field"><span>Workload type</span><select value={workload} onChange={(event) => setWorkload(event.target.value)}><option>All</option>{workloadTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
+          {filterSpecs.map(([label, value, setter, values]) => (
+            <label className="filter-field" key={label}><span>{label}</span><select value={value} onChange={(event) => setter(event.target.value)}><option>All</option>{values.map((option) => <option key={option}>{option}</option>)}</select></label>
           ))}
         </div>
         <button className="clear-filters" type="button" onClick={clear}>Clear all filters</button>
-        <div className="sidebar-footnote"><span className="privacy-dot" />Reviewed public traces and one clearly labeled synthetic showcase are included.</div>
+        <div className="sidebar-footnote"><span className="privacy-dot" />Reviewed public traces and clearly labeled synthetic showcases are included.</div>
       </aside>
       <main className="catalog-main">
         <PublicDataNotice />
@@ -121,11 +161,19 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
           <div className="table-toolbar"><div><h2>Trace catalog</h2><p>{runs.length} public traces shown</p></div><div className="legend-inline"><QualityBadge status="PASS_MAIN" /></div></div>
           <div className="table-scroll">
             <table className="trace-table">
-              <thead><tr><th>Run ID</th><th>Workload</th><th>Source</th><th>Model</th><th>Method</th><th>GPU</th><th>GPU Count</th><th>Seq Len</th><th>Microbatch</th><th>Grad Accum</th><th>Duration</th><th>Median Δt</th><th>Mean Power</th><th>P99 Power</th><th>R99 Up 1s</th><th>Energy</th><th>Quality</th><th /></tr></thead>
-              <tbody>{runs.map((run) => <tr key={run.run_id} onClick={() => { window.location.hash = `/runs/${run.run_id}`; }} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") window.location.hash = `/runs/${run.run_id}`; }}>
-                <td><strong className="run-id">{run.run_id}</strong><small>canonical_power_trace.csv</small></td>
-                <td>{workloadLabel(run)}</td><td><span className="source-chip">{run.source_family}</span></td><td>{modelLabel(run)}</td><td>{run.method}</td><td>{run.gpu_type}</td><td>{run.gpu_count}</td><td>{run.sequence_length}</td><td>{run.microbatch_size}</td><td>{run.grad_accum_steps}</td><td>{fmtSeconds(run.duration_observed_s)}</td><td><FormatValue value={run.sampling_interval_observed_median_s} suffix=" s" digits={3} /></td><td><FormatValue value={run.mean_total_power_w} suffix=" W" /></td><td><FormatValue value={run.p99_total_power_w} suffix=" W" /></td><td><FormatValue value={run.ramp_up_p99_1s_w_per_s} suffix=" W/s" /></td><td><FormatValue value={run.total_energy_wh} suffix=" Wh" digits={2} /></td><td><QualityBadge status={run.quality_status} /></td><td><span className="row-arrow">→</span></td>
-              </tr>)}</tbody>
+              {inferenceView ? <>
+                <thead><tr><th>Run ID</th><th>Workload</th><th>Source</th><th>Model</th><th>GPU</th><th>TP</th><th>KV Cache</th><th>Weight Quant.</th><th>GPU Frequency</th><th>In-flight</th><th>Arrival Pattern</th><th>Arrival Rate</th><th>Duration</th><th>Mean Power</th><th>P99 Power</th><th>Energy</th><th>Quality</th><th /></tr></thead>
+                <tbody>{runs.map((run) => <tr key={run.run_id} onClick={() => { window.location.hash = `/runs/${run.run_id}`; }} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") window.location.hash = `/runs/${run.run_id}`; }}>
+                  <td><strong className="run-id">{run.run_id}</strong><small>canonical_power_trace.csv</small></td>
+                  <td>{workloadLabel(run)}</td><td><span className="source-chip">{run.source_family}</span></td><td>{modelLabel(run)}</td><td>{run.gpu_type}</td><td>{run.tensor_parallel_size ?? "Not found"}</td><td>{run.kv_cache_quantization ?? "Not found"}</td><td>{run.model_weight_quantization ?? "Not found"}</td><td>{run.gpu_frequency_mhz != null ? `${run.gpu_frequency_mhz} MHz` : "Not found"}</td><td>{run.in_flight_requests ?? run.concurrency ?? "Not found"}</td><td>{run.arrival_pattern ?? "Not found"}</td><td>{run.arrival_rate_label ?? (run.arrival_rate_rps != null ? `${run.arrival_rate_rps} req/s` : "Not found")}</td><td>{fmtSeconds(run.duration_observed_s)}</td><td><FormatValue value={run.mean_total_power_w} suffix=" W" /></td><td><FormatValue value={run.p99_total_power_w} suffix=" W" /></td><td><FormatValue value={run.total_energy_wh} suffix=" Wh" digits={2} /></td><td><QualityBadge status={run.quality_status} /></td><td><span className="row-arrow">→</span></td>
+                </tr>)}</tbody>
+              </> : <>
+                <thead><tr><th>Run ID</th><th>Workload</th><th>Source</th><th>Model</th><th>Method</th><th>GPU</th><th>GPU Count</th><th>Seq Len</th><th>Microbatch</th><th>Grad Accum</th><th>Duration</th><th>Median Δt</th><th>Mean Power</th><th>P99 Power</th><th>R99 Up 1s</th><th>Energy</th><th>Quality</th><th /></tr></thead>
+                <tbody>{runs.map((run) => <tr key={run.run_id} onClick={() => { window.location.hash = `/runs/${run.run_id}`; }} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") window.location.hash = `/runs/${run.run_id}`; }}>
+                  <td><strong className="run-id">{run.run_id}</strong><small>canonical_power_trace.csv</small></td>
+                  <td>{workloadLabel(run)}</td><td><span className="source-chip">{run.source_family}</span></td><td>{modelLabel(run)}</td><td>{run.method}</td><td>{run.gpu_type}</td><td>{run.gpu_count}</td><td>{run.sequence_length}</td><td>{run.microbatch_size}</td><td>{run.grad_accum_steps}</td><td>{fmtSeconds(run.duration_observed_s)}</td><td><FormatValue value={run.sampling_interval_observed_median_s} suffix=" s" digits={3} /></td><td><FormatValue value={run.mean_total_power_w} suffix=" W" /></td><td><FormatValue value={run.p99_total_power_w} suffix=" W" /></td><td><FormatValue value={run.ramp_up_p99_1s_w_per_s} suffix=" W/s" /></td><td><FormatValue value={run.total_energy_wh} suffix=" Wh" digits={2} /></td><td><QualityBadge status={run.quality_status} /></td><td><span className="row-arrow">→</span></td>
+                </tr>)}</tbody>
+              </>}
             </table>
           </div>
           <div className="table-footer"><span>Every trace is reviewed public data or explicitly labeled synthetic.</span><span>Open a run to zoom, pan, and inspect telemetry.</span></div>
@@ -174,7 +222,14 @@ function downloadText(filename: string, content: string, type: string) {
 function Detail({ detail }: { detail: PublicRunDetail }) {
   const { run } = detail;
   const synthetic = isSynthetic(run);
-  const modelItems: [string, ReactNode][] = [
+  const inference = workloadLabel(run) === "Inference";
+  const modelItems: [string, ReactNode][] = inference ? [
+    ["Model", modelLabel(run)],
+    ["Serving engine", run.inference_engine ?? run.method],
+    ["Precision / dtype", `${run.precision} / ${run.compute_dtype}`],
+    ["Prompt profile", run.prompt_profile ?? "Not found"],
+    ["Dataset / request source", run.dataset_name],
+  ] : [
     ["Model", modelLabel(run)],
     ["Method", run.method],
     ["Precision / dtype", `${run.precision} / ${run.compute_dtype}`],
@@ -182,6 +237,17 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
     ["Microbatch", run.microbatch_size],
     ["Grad accumulation", run.grad_accum_steps],
     ["Dataset", run.dataset_name],
+  ];
+  const inferenceItems: [string, ReactNode][] = [
+    ["TP number", run.tensor_parallel_size ?? "Not found"],
+    ["KV cache quantization", run.kv_cache_quantization ?? "Not found"],
+    ["Model weight quantization", run.model_weight_quantization ?? "Not found"],
+    ["GPU frequency", run.gpu_frequency_mhz != null ? `${run.gpu_frequency_mhz} MHz` : "Not found"],
+    ["In-flight requests / concurrency", run.in_flight_requests ?? run.concurrency ?? "Not found"],
+    ["GPU", run.gpu_type],
+    ["Model", modelLabel(run)],
+    ["Arrival pattern", run.arrival_pattern ?? "Not found"],
+    ["Arrival rate", run.arrival_rate_label ?? (run.arrival_rate_rps != null ? `${run.arrival_rate_rps} req/s` : "Not found")],
   ];
   const [smoothing, setSmoothing] = useState(0);
   const raw = useMemo(() => withComputedTotalPower(detail.samples), [detail.samples]);
@@ -203,6 +269,7 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
         <div className="metadata-title"><div><p className="eyebrow">Run record</p><h2>Metadata</h2></div><span>{raw.length} samples</span></div>
         <MetadataCard title="Run Identity" items={[["Run ID", run.run_id], ["Workload type", workloadLabel(run)], ["Source family", run.source_family], ["Trace path", <code key="trace">{run.trace_path}</code>], ["Data status", synthetic ? "Illustrative synthetic telemetry (not measured)" : "Reviewed public export"]]} />
         <MetadataCard title="Model and Execution" items={modelItems} />
+        {inference && <MetadataCard title="Inference sweep parameters" items={inferenceItems} />}
         <MetadataCard title="Hardware and Logging" items={[["GPU type", run.gpu_type], ["GPU count", run.gpu_count], ["Parallelism", run.parallelism], ["Median interval", `${run.sampling_interval_observed_median_s} s`], ["Clock telemetry", run.has_clock_telemetry ? "Available" : "Not found"], ["Utilization telemetry", run.has_utilization_telemetry ? "Available" : "Not found"], ["Memory telemetry", raw.some((sample) => sample.memory_used_mb != null) ? "Available" : "Not found"], ["Temperature telemetry", run.has_temperature_telemetry ? "Available" : "Not found"], ["Stage labels", run.has_stage_labels ? "Available" : "Not found"]]} />
         <MetadataCard title="Power Metrics" items={[["Mean total power", `${run.mean_total_power_w} W`], ["P99 total power", `${run.p99_total_power_w} W`], ["Max total power", `${run.max_total_power_w} W`], ["Total energy", `${run.total_energy_wh} Wh`], ["R99 upward ramp", `${run.ramp_up_p99_1s_w_per_s} W/s`]]} />
         <div className="metadata-actions"><a className="button button-primary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><button className="button button-secondary" onClick={() => downloadText(`${run.run_id}_metadata.json`, JSON.stringify(run, null, 2), "application/json")}>↓ Metadata JSON</button><a className="button button-ghost" href="#/">← Back to Trace List</a></div>
@@ -232,7 +299,7 @@ function RawData({ detail }: { detail: PublicRunDetail }) {
 }
 
 function About() {
-  return <main className="about-main static-about"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>About</span></div><section className="about-hero"><p className="eyebrow">Public research dataset</p><h1>About the trace explorer</h1><p>This GitHub Pages edition presents reviewed, canonical GPU power traces selected for intentional public release, plus one clearly labeled synthetic full-telemetry showcase. The local FastAPI edition remains available for private-data workflows and is unchanged.</p><div className="privacy-callout"><span className="privacy-dot" /><div><strong>Public by design</strong><p>Displayed data is sanitized and either research-ready or explicitly synthetic; private HPC inputs are not included.</p></div></div></section><div className="about-grid"><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Mean power</h2><div className="formula">mean(P<sub>total</sub>(t))</div><p>Mean of total observed GPU power over normalized timestamps.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Total energy</h2><div className="formula">∑ P<sub>total</sub>(t) × Δt / 3600</div><p>Timestamp-aware trapezoidal integration in watt-hours.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>High-percentile power</h2><div className="formula">P95, P99 of P<sub>total</sub>(t)</div><p>High quantiles of the normalized total-power series.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Ramp rate</h2><div className="formula">R<sub>δ</sub>(t) = [P(t) − P(t − δ)] / δ</div><p>Computed from actual time rather than fixed row offsets.</p></section></div><div className="about-actions"><a className="button button-primary" href="#/">← Return to Trace Catalog</a><a className="button button-secondary" href={REPOSITORY_URL} target="_blank" rel="noreferrer">View source on GitHub ↗</a></div></main>;
+  return <main className="about-main static-about"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>About</span></div><section className="about-hero"><p className="eyebrow">Public research dataset</p><h1>About the trace explorer</h1><p>This GitHub Pages edition presents reviewed, canonical GPU power traces selected for intentional public release, plus clearly labeled synthetic training and inference showcases. The local FastAPI edition remains available for private-data workflows and is unchanged.</p><div className="privacy-callout"><span className="privacy-dot" /><div><strong>Public by design</strong><p>Displayed data is sanitized and either research-ready or explicitly synthetic; private HPC inputs are not included.</p></div></div></section><div className="about-grid"><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Mean power</h2><div className="formula">mean(P<sub>total</sub>(t))</div><p>Mean of total observed GPU power over normalized timestamps.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Total energy</h2><div className="formula">∑ P<sub>total</sub>(t) × Δt / 3600</div><p>Timestamp-aware trapezoidal integration in watt-hours.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>High-percentile power</h2><div className="formula">P95, P99 of P<sub>total</sub>(t)</div><p>High quantiles of the normalized total-power series.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Ramp rate</h2><div className="formula">R<sub>δ</sub>(t) = [P(t) − P(t − δ)] / δ</div><p>Computed from actual time rather than fixed row offsets.</p></section></div><div className="about-actions"><a className="button button-primary" href="#/">← Return to Trace Catalog</a><a className="button button-secondary" href={REPOSITORY_URL} target="_blank" rel="noreferrer">View source on GitHub ↗</a></div></main>;
 }
 
 function NotFound() { return <main className="standalone-state"><EmptyState title="Route not found">Return to the public trace catalog.</EmptyState><a className="button button-primary" href="#/">Back to catalog</a></main>; }
