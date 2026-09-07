@@ -81,6 +81,55 @@ function telemetry(time, gpu) {
   };
 }
 
+function requestTimelinePoint(time) {
+  const stage = phaseAt(time);
+  let requestsArrived;
+  let activeRequests;
+  let promptTokens;
+  let outputTokens;
+  if (stage === "engine_initialization") {
+    requestsArrived = time < 10 ? 0 : 2;
+    activeRequests = Math.round(time / 10);
+    promptTokens = 180;
+    outputTokens = 65;
+  } else if (stage === "model_load_and_kv_warmup") {
+    requestsArrived = 5 + Math.round(2 * Math.sin(time / 8));
+    activeRequests = 8 + Math.round((time - 30) * 0.32);
+    promptTokens = 260 + 18 * Math.sin(time / 12);
+    outputTokens = 95 + 10 * Math.cos(time / 15);
+  } else if (stage === "burstgpt_burst_window") {
+    requestsArrived = 30 + Math.round(8 * Math.sin(time / 6));
+    activeRequests = 43 + Math.round(4 * Math.sin(time / 12));
+    promptTokens = 740 + 75 * Math.sin(time / 11);
+    outputTokens = 300 + 34 * Math.cos(time / 9);
+  } else if (stage === "peak_mean_arrival_window") {
+    requestsArrived = 23 + Math.round(6 * Math.sin(time / 8));
+    activeRequests = 38 + Math.round(5 * Math.sin(time / 15));
+    promptTokens = 670 + 60 * Math.sin(time / 13);
+    outputTokens = 260 + 28 * Math.cos(time / 10);
+  } else if (stage === "usual_traffic_window") {
+    requestsArrived = 12 + Math.round(3 * Math.sin(time / 12));
+    activeRequests = 23 + Math.round(3 * Math.sin(time / 18));
+    promptTokens = 480 + 45 * Math.sin(time / 16);
+    outputTokens = 160 + 18 * Math.cos(time / 11);
+  } else {
+    const progress = (time - 540) / 60;
+    requestsArrived = Math.max(0, Math.round(8 * (1 - progress)));
+    activeRequests = Math.max(0, Math.round(17 * (1 - progress)));
+    promptTokens = 330 + 30 * (1 - progress);
+    outputTokens = 120 + 15 * (1 - progress);
+  }
+  return {
+    time_relative_s: time,
+    window_s: 5,
+    requests_arrived: clamp(requestsArrived, 0, 48),
+    active_requests: clamp(activeRequests, 0, 64),
+    mean_prompt_tokens: round(promptTokens, 1),
+    mean_output_tokens: round(outputTokens, 1),
+    mean_request_tokens: round(promptTokens + outputTokens, 1),
+  };
+}
+
 const samples = [];
 const totals = [];
 for (let time = 0; time <= durationS; time += 1) {
@@ -97,6 +146,8 @@ for (let time = 0; time <= durationS; time += 1) {
   totals.push(round(tick.reduce((sum, row) => sum + row.power_w, 0)));
   samples.push(...tick);
 }
+const inferenceTimeline = [];
+for (let time = 0; time <= durationS; time += 5) inferenceTimeline.push(requestTimelinePoint(time));
 
 const energyWh = totals.slice(1).reduce((sum, value, index) => sum + ((value + totals[index]) / 2) / 3600, 0);
 const ramps = totals.slice(1).map((value, index) => value - totals[index]);
@@ -178,10 +229,13 @@ const run = {
   run_json_path: `runs/${runId}.json`,
   raw_csv_path: `raw/${runId}.csv`,
   metadata_json_path: `metadata/${runId}.json`,
+  request_timeline_path: `requests/${runId}.csv`,
 };
 
 const csvColumns = ["run_id", "timestamp", "time_relative_s", "gpu_id", "power_w", "sm_clock_mhz", "gpu_util_pct", "memory_util_pct", "memory_used_mb", "memory_total_mb", "temperature_c", "stage"];
 const csv = [csvColumns.join(","), ...samples.map((sample) => csvColumns.map((column) => sample[column]).join(","))].join("\n") + "\n";
+const requestTimelineColumns = ["time_relative_s", "window_s", "requests_arrived", "active_requests", "mean_prompt_tokens", "mean_output_tokens", "mean_request_tokens"];
+const requestTimelineCsv = [requestTimelineColumns.join(","), ...inferenceTimeline.map((point) => requestTimelineColumns.map((column) => point[column]).join(","))].join("\n") + "\n";
 const catalogPath = join(dataRoot, "catalog.json");
 const catalog = JSON.parse(await readFile(catalogPath, "utf8")).filter((entry) => entry.run_id !== runId);
 catalog.unshift(run);
@@ -196,12 +250,14 @@ audit.published_runs = catalog.length;
 audit.synthetic_showcase_runs = catalog.filter((entry) => entry.quality_status === "DEMO_SYNTHETIC").length;
 audit.synthetic_showcase_policy = "Clearly labeled deterministic training and inference traces are included solely to demonstrate complete interface telemetry; they are not measured research runs.";
 audit.inference_parameter_taxonomy = ["TP number", "KV cache quantization", "model weight quantization", "GPU frequency", "in-flight requests or concurrency", "GPU", "model", "arrival rate (BurstGPT only)"];
+audit.inference_request_timeline_schema = requestTimelineColumns;
 
-for (const path of [join(dataRoot, "runs", `${runId}.json`), join(dataRoot, "metadata", `${runId}.json`), join(dataRoot, "raw", `${runId}.csv`)]) await mkdir(dirname(path), { recursive: true });
+for (const path of [join(dataRoot, "runs", `${runId}.json`), join(dataRoot, "metadata", `${runId}.json`), join(dataRoot, "raw", `${runId}.csv`), join(dataRoot, "requests", `${runId}.csv`)]) await mkdir(dirname(path), { recursive: true });
 await Promise.all([
-  writeFile(join(dataRoot, "runs", `${runId}.json`), `${JSON.stringify({ run, samples }, null, 2)}\n`),
+  writeFile(join(dataRoot, "runs", `${runId}.json`), `${JSON.stringify({ run, samples, inference_timeline: inferenceTimeline }, null, 2)}\n`),
   writeFile(join(dataRoot, "metadata", `${runId}.json`), `${JSON.stringify(run, null, 2)}\n`),
   writeFile(join(dataRoot, "raw", `${runId}.csv`), csv),
+  writeFile(join(dataRoot, "requests", `${runId}.csv`), requestTimelineCsv),
   writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`),
   writeFile(auditPath, `${JSON.stringify(audit, null, 2)}\n`),
 ]);

@@ -1,0 +1,6 @@
+request_id,time_relative_s,completion_time,prompt_tokens,output_tokens,active_requests
+req-001,0.2,4.1,128,56,1
+req-002,1.8,5.4,256,76,2
+req-003,5.2,11.8,512,110,3
+req-004,6.6,12.0,384,92,4
+req-005,9.9,15.6,640,128,5

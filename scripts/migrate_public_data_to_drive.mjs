@@ -73,15 +73,29 @@ async function uploadPublicFile(options) {
   return fileId;
 }
 
+function parseRequestTimeline(csv) {
+  const [header = "", ...rows] = csv.trim().split(/\r?\n/).filter(Boolean);
+  const columns = header.split(",").map((column) => column.trim());
+  return rows.map((row) => {
+    const values = row.split(",");
+    return Object.fromEntries(columns.map((column, index) => {
+      const value = values[index]?.trim() ?? "";
+      return [column, value === "" ? null : (Number.isFinite(Number(value)) ? Number(value) : value)];
+    }));
+  });
+}
+
 const catalog = JSON.parse(await readFile(join(sourceRoot, "catalog.json"), "utf8"));
 if (dryRun) {
   let samples = 0;
   for (const sourceRun of catalog) {
     const detail = JSON.parse(await readFile(join(sourceRoot, sourceRun.run_json_path), "utf8"));
-    await Promise.all([
+    const requiredFiles = [
       readFile(join(sourceRoot, sourceRun.metadata_json_path)),
       readFile(join(sourceRoot, sourceRun.raw_csv_path)),
-    ]);
+    ];
+    if (sourceRun.request_timeline_path) requiredFiles.push(readFile(join(sourceRoot, sourceRun.request_timeline_path)));
+    await Promise.all(requiredFiles);
     samples += detail.samples.length;
   }
   console.log(`Dry run passed: ${catalog.length} trace records and ${samples.toLocaleString()} samples are ready for Google Drive.`);
@@ -91,6 +105,7 @@ const folders = {
   runs: await createFolder("runs", parentFolderId),
   metadata: await createFolder("metadata", parentFolderId),
   raw: await createFolder("raw", parentFolderId),
+  requests: await createFolder("requests", parentFolderId),
 };
 await Promise.all(Object.values(folders).map(makePublic));
 
@@ -100,14 +115,20 @@ for (const sourceRun of catalog) {
   const sourceDetail = JSON.parse(await readFile(join(sourceRoot, sourceRun.run_json_path), "utf8"));
   const sourceMetadata = JSON.parse(await readFile(join(sourceRoot, sourceRun.metadata_json_path), "utf8"));
   const sourceCsv = await readFile(join(sourceRoot, sourceRun.raw_csv_path), "utf8");
+  const requestTimelineCsv = sourceRun.request_timeline_path
+    ? await readFile(join(sourceRoot, sourceRun.request_timeline_path), "utf8")
+    : null;
 
   const rawCsvFileId = await uploadPublicFile({
     name: basename(sourceRun.raw_csv_path), mimeType: "text/csv", content: sourceCsv, parent: folders.raw,
   });
+  const requestTimelineFileId = requestTimelineCsv ? await uploadPublicFile({
+    name: basename(sourceRun.request_timeline_path), mimeType: "text/csv", content: requestTimelineCsv, parent: folders.requests,
+  }) : null;
   const metadataJsonFileId = await uploadPublicFile({
     name: basename(sourceRun.metadata_json_path), mimeType: "application/json", content: JSON.stringify({
       ...sourceMetadata,
-      storage: { provider: "google-drive", raw_csv_file_id: rawCsvFileId },
+      storage: { provider: "google-drive", raw_csv_file_id: rawCsvFileId, ...(requestTimelineFileId ? { request_timeline_file_id: requestTimelineFileId } : {}) },
     }, null, 2), parent: folders.metadata,
   });
 
@@ -118,11 +139,14 @@ for (const sourceRun of catalog) {
     meta_path: `Google Drive / metadata / ${basename(sourceRun.metadata_json_path)}`,
     raw_csv_file_id: rawCsvFileId,
     metadata_json_file_id: metadataJsonFileId,
+    ...(requestTimelineFileId ? { request_timeline_file_id: requestTimelineFileId } : {}),
   };
+  const inferenceTimeline = sourceDetail.inference_timeline ?? (requestTimelineCsv ? parseRequestTimeline(requestTimelineCsv) : undefined);
   const runJsonFileId = await uploadPublicFile({
     name: basename(sourceRun.run_json_path), mimeType: "application/json", content: JSON.stringify({
       run: publicRun,
       samples: sourceDetail.samples,
+      ...(inferenceTimeline?.length ? { inference_timeline: inferenceTimeline } : {}),
     }), parent: folders.runs,
   });
   driveCatalog.push({ ...publicRun, run_json_file_id: runJsonFileId });

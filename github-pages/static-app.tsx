@@ -3,7 +3,8 @@ import { PowerChart } from "../app/components/PowerChart";
 import { EmptyState, FormatValue, LoadingBlock, QualityBadge } from "../app/components/Ui";
 import { withComputedTotalPower } from "../app/lib/power-series";
 import type { Run, Sample } from "../app/lib/types";
-import { loadCatalog, loadRun, publicArtifactUrl, type PublicRun, type PublicRunDetail } from "./public-data";
+import { InferenceRequestTimeline } from "./inference-request-timeline";
+import { loadCatalog, loadRun, publicArtifactUrl, type InferenceRequestTimelinePoint, type PublicRun, type PublicRunDetail } from "./public-data";
 
 const REPOSITORY_URL = "https://github.com/Leo-hxu/training-power-trace-explorer";
 
@@ -31,6 +32,7 @@ function Header() {
         </a>
         <nav className="header-actions">
           <span className="static-demo-badge"><i /> Public reference &amp; demo data</span>
+          <a className="button button-ghost" href="#/data-guide">Data guide</a>
           <a className="button button-ghost" href="#/about">ⓘ About</a>
           <a className="button button-secondary" href={REPOSITORY_URL} target="_blank" rel="noreferrer">GitHub ↗</a>
         </nav>
@@ -58,6 +60,75 @@ function modelLabel(run: Pick<Run, "model" | "model_metadata_status">) {
 
 function workloadLabel(run: Pick<Run, "workload_type">) {
   return run.workload_type === "Inference" ? "Inference" : "Training";
+}
+
+function syntheticInferenceTimeline(run: Pick<Run, "duration_observed_s" | "source_family" | "quality_status" | "workload_type">): InferenceRequestTimelinePoint[] | undefined {
+  if (!isSynthetic(run) || workloadLabel(run) !== "Inference") return undefined;
+  const duration = Math.max(60, Math.round(Number(run.duration_observed_s) || 600));
+  const windowS = 5;
+  const clamp = (value: number, lower: number, upper: number) => Math.max(lower, Math.min(upper, value));
+  const round = (value: number) => Number(value.toFixed(1));
+  const rows: InferenceRequestTimelinePoint[] = [];
+  for (let time = 0; time <= duration; time += windowS) {
+    let arrivals: number;
+    let active: number;
+    let prompt: number;
+    let output: number;
+    if (time < 30) {
+      arrivals = time < 10 ? 0 : 2;
+      active = Math.max(0, Math.round(time / 10));
+      prompt = 180;
+      output = 65;
+    } else if (time < 90) {
+      arrivals = 5 + Math.round(2 * Math.sin(time / 8));
+      active = 8 + Math.round((time - 30) * 0.32);
+      prompt = 260 + 18 * Math.sin(time / 12);
+      output = 95 + 10 * Math.cos(time / 15);
+    } else if (time < 190) {
+      arrivals = 11 + Math.round(3 * Math.sin(time / 10));
+      active = 24 + Math.round(3 * Math.sin(time / 17));
+      prompt = 510 + 52 * Math.sin(time / 18);
+      output = 180 + 20 * Math.cos(time / 14);
+    } else if (time < 280) {
+      arrivals = 30 + Math.round(8 * Math.sin(time / 6));
+      active = 43 + Math.round(4 * Math.sin(time / 12));
+      prompt = 740 + 75 * Math.sin(time / 11);
+      output = 300 + 34 * Math.cos(time / 9);
+    } else if (time < 410) {
+      arrivals = 23 + Math.round(6 * Math.sin(time / 8));
+      active = 38 + Math.round(5 * Math.sin(time / 15));
+      prompt = 670 + 60 * Math.sin(time / 13);
+      output = 260 + 28 * Math.cos(time / 10);
+    } else if (time < duration - 60) {
+      arrivals = 12 + Math.round(3 * Math.sin(time / 12));
+      active = 23 + Math.round(3 * Math.sin(time / 18));
+      prompt = 480 + 45 * Math.sin(time / 16);
+      output = 160 + 18 * Math.cos(time / 11);
+    } else {
+      const progress = (time - (duration - 60)) / 60;
+      arrivals = Math.max(0, Math.round(8 * (1 - progress)));
+      active = Math.max(0, Math.round(17 * (1 - progress)));
+      prompt = 330 + 30 * (1 - progress);
+      output = 120 + 15 * (1 - progress);
+    }
+    rows.push({
+      time_relative_s: time,
+      window_s: windowS,
+      requests_arrived: clamp(arrivals, 0, 48),
+      active_requests: clamp(active, 0, 64),
+      mean_prompt_tokens: round(prompt),
+      mean_output_tokens: round(output),
+      mean_request_tokens: round(prompt + output),
+    });
+  }
+  return rows;
+}
+
+function hasTimelineField(timeline: InferenceRequestTimelinePoint[] | undefined, field: "requests_arrived" | "mean_request_tokens" | "mean_prompt_tokens" | "mean_output_tokens") {
+  return Boolean(timeline?.some((point) => {
+    const value = point[field];
+    return value !== null && value !== undefined && Number.isFinite(Number(value));
+  }));
 }
 
 const workloadTypes = ["Training", "Inference"];
@@ -257,24 +328,35 @@ function Detail({ detail }: { detail: PublicRunDetail }) {
   const [smoothing, setSmoothing] = useState(0);
   const raw = useMemo(() => withComputedTotalPower(detail.samples), [detail.samples]);
   const samples = useMemo(() => smoothSamples(raw, smoothing), [raw, smoothing]);
+  const requestTimeline = detail.inference_timeline?.length ? detail.inference_timeline : syntheticInferenceTimeline(run);
+  const powerTimeRange = useMemo<[number, number]>(() => {
+    const values = raw.map((sample) => sample.time_relative_s).filter(Number.isFinite);
+    const start = values.length ? Math.min(...values) : 0;
+    const end = values.length ? Math.max(...values) : start + 1;
+    return end > start ? [start, end] : [start, start + 1];
+  }, [raw]);
   const stages: { time_relative_s: number; stage: string }[] = [];
   let lastStage = "";
   raw.forEach((sample) => { if (sample.stage && sample.stage !== lastStage) { stages.push({ time_relative_s: sample.time_relative_s, stage: sample.stage }); lastStage = sample.stage; } });
   return <main className="detail-main static-detail">
     <PublicDataNotice />
     <div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>{run.run_id}</span></div>
-    <section className="run-heading"><div><p className="eyebrow">{synthetic ? "Synthetic showcase trace" : "Public trace detail"}</p><h1>Run: {run.run_id}</h1><div className="run-badges">{[workloadLabel(run), run.gpu_type, modelLabel(run), run.method, `Seq ${run.sequence_length}`, run.source_family].map((badge) => <span key={badge}>{badge}</span>)}<QualityBadge status={run.quality_status} /></div></div><div className="heading-actions"><a className="button button-secondary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><a className="button button-primary" href={publicArtifactUrl(run.raw_csv_file_id)} download>↓ Download CSV</a></div></section>
+    <section className="run-heading"><div><p className="eyebrow">{synthetic ? "Synthetic showcase trace" : "Public trace detail"}</p><h1>Run: {run.run_id}</h1><div className="run-badges">{[workloadLabel(run), run.gpu_type, modelLabel(run), run.method, `Seq ${run.sequence_length}`, run.source_family].map((badge) => <span key={badge}>{badge}</span>)}<QualityBadge status={run.quality_status} /></div></div><div className="heading-actions">{inference && run.request_timeline_file_id ? <a className="button button-secondary" href={publicArtifactUrl(run.request_timeline_file_id)} download>↓ Request Timeline</a> : null}<a className="button button-secondary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><a className="button button-primary" href={publicArtifactUrl(run.raw_csv_file_id)} download>↓ Download CSV</a></div></section>
     <div className="detail-grid">
-      <section className="plot-card static-plot-card">
-        <div className="panel-heading plot-heading"><div><p className="eyebrow">Canonical normalized telemetry</p><h2>GPU power over time</h2><p>{samples.length.toLocaleString()} plotted samples · scroll to zoom, drag to pan</p></div><div className="plot-controls"><label><span>Smoothing</span><select value={smoothing} onChange={(event) => setSmoothing(Number(event.target.value))}><option value="0">Raw</option><option value="1">Rolling 1 s</option><option value="5">Rolling 5 s</option><option value="10">Rolling 10 s</option></select></label></div></div>
-        <PowerChart samples={samples} stages={stages} />
-        <div className="plot-footnote"><span>{synthetic ? "Synthetic illustrative telemetry." : "Reviewed public data."}</span><span>Double-click to reset zoom.</span></div>
-      </section>
+      <div className="detail-content">
+        <section className="plot-card static-plot-card">
+          <div className="panel-heading plot-heading"><div><p className="eyebrow">Canonical normalized telemetry</p><h2>GPU power over time</h2><p>{samples.length.toLocaleString()} plotted samples · scroll to zoom, drag to pan</p></div><div className="plot-controls"><label><span>Smoothing</span><select value={smoothing} onChange={(event) => setSmoothing(Number(event.target.value))}><option value="0">Raw</option><option value="1">Rolling 1 s</option><option value="5">Rolling 5 s</option><option value="10">Rolling 10 s</option></select></label></div></div>
+          <PowerChart samples={samples} stages={stages} />
+          <div className="plot-footnote"><span>{synthetic ? "Synthetic illustrative telemetry." : "Reviewed public data."}</span><span>Double-click to reset zoom.</span></div>
+        </section>
+        {inference ? <InferenceRequestTimeline timeline={requestTimeline} powerTimeRange={powerTimeRange} synthetic={synthetic} /> : null}
+      </div>
       <aside className="metadata-panel">
         <div className="metadata-title"><div><p className="eyebrow">Run record</p><h2>Metadata</h2></div><span>{raw.length} samples</span></div>
         <MetadataCard title="Run Identity" items={[["Run ID", run.run_id], ["Workload type", workloadLabel(run)], ["Source family", run.source_family], ["Trace path", <code key="trace">{run.trace_path}</code>], ["Data status", synthetic ? "Illustrative synthetic telemetry (not measured)" : "Reviewed public export"]]} />
         <MetadataCard title="Model and Execution" items={modelItems} />
         {inference && <MetadataCard title="Inference sweep parameters" items={inferenceItems} />}
+        {inference && <MetadataCard title="Request Telemetry" items={[["Arrival timeline", hasTimelineField(requestTimeline, "requests_arrived") ? (synthetic ? "Synthetic time-aligned series" : "Time-aligned series") : "Not found"], ["Request-size timeline", hasTimelineField(requestTimeline, "mean_request_tokens") || hasTimelineField(requestTimeline, "mean_prompt_tokens") || hasTimelineField(requestTimeline, "mean_output_tokens") ? (synthetic ? "Synthetic time-aligned series" : "Time-aligned series") : "Not found"], ["Request timeline file", run.request_timeline_file_id ? <a key="request-timeline" className="text-link" href={publicArtifactUrl(run.request_timeline_file_id)} download>Download CSV</a> : (synthetic && requestTimeline?.length ? "Generated deterministic demo series" : "Not found")]]} />}
         <MetadataCard title="Hardware and Logging" items={[["GPU type", run.gpu_type], ["GPU count", run.gpu_count], ["Parallelism", run.parallelism], ["Median interval", `${run.sampling_interval_observed_median_s} s`], ["Clock telemetry", run.has_clock_telemetry ? "Available" : "Not found"], ["Utilization telemetry", run.has_utilization_telemetry ? "Available" : "Not found"], ["Memory telemetry", raw.some((sample) => sample.memory_used_mb != null) ? "Available" : "Not found"], ["Temperature telemetry", run.has_temperature_telemetry ? "Available" : "Not found"], ["Stage labels", run.has_stage_labels ? "Available" : "Not found"]]} />
         <MetadataCard title="Power Metrics" items={[["Mean total power", `${run.mean_total_power_w} W`], ["P99 total power", `${run.p99_total_power_w} W`], ["Max total power", `${run.max_total_power_w} W`], ["Total energy", `${run.total_energy_wh} Wh`], ["R99 upward ramp", `${run.ramp_up_p99_1s_w_per_s} W/s`]]} />
         <div className="metadata-actions"><a className="button button-primary" href={`#/runs/${run.run_id}/data`}>▤ View Raw Data</a><button className="button button-secondary" onClick={() => downloadText(`${run.run_id}_metadata.json`, JSON.stringify(run, null, 2), "application/json")}>↓ Metadata JSON</button><a className="button button-ghost" href="#/">← Back to Trace List</a></div>
@@ -303,8 +385,46 @@ function RawData({ detail }: { detail: PublicRunDetail }) {
   </main>;
 }
 
+function DataGuide() {
+  const documentationUrl = `${REPOSITORY_URL}/blob/main/docs/DATA_SUBMISSION.md`;
+  const packageLayout = [
+    "LLM-Power-Trace-Import-v1-<contributor>-<date>/",
+    "├── raw/<run_id>.csv",
+    "├── metadata/<run_id>.json",
+    "├── requests/<run_id>.csv        # optional normalized inference timeline",
+    "├── runs/<run_id>.json           # normalized display payload",
+    "├── catalog.json",
+    "├── publication-audit.json",
+    "├── import-manifest.json",
+    "├── submission.json",
+    "└── README.md",
+  ].join("\n");
+  return <main className="data-guide-main static-about">
+    <PublicDataNotice />
+    <div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>Data guide</span></div>
+    <section className="data-guide-hero">
+      <p className="eyebrow">Contributor guide</p>
+      <h1>Prepare data for the trace explorer</h1>
+      <p>Contributors supply factual per-run metadata and original telemetry. The import builder creates the catalog, audit, manifest, and publication records after validation.</p>
+      <div className="data-guide-callout"><strong>Do not estimate missing metadata.</strong><span>Use <code>null</code> or leave the value empty when it was not recorded.</span></div>
+    </section>
+    <section className="data-guide-ownership" aria-label="Submission responsibilities">
+      <div><p className="eyebrow">You provide</p><h2>Per-run research inputs</h2><ul><li>Original GPU telemetry CSV</li><li>One factual metadata record per run</li><li>Optional request-event log for inference</li></ul></div>
+      <div><p className="eyebrow">Builder creates</p><h2>Validated package records</h2><ul><li><code>catalog.json</code> and normalized <code>runs/</code> payloads</li><li><code>import-manifest.json</code> with checksums</li><li><code>publication-audit.json</code>, <code>submission.json</code>, and <code>README.md</code></li></ul></div>
+      <div><p className="eyebrow">Review decides</p><h2>Public availability</h2><ul><li>Schema and integrity checks</li><li>Consent and public-release review</li><li>Move approved data from staging to published</li></ul></div>
+    </section>
+    <div className="data-guide-grid">
+      <section className="data-guide-card"><p className="eyebrow">Package layout</p><h2>What the builder produces</h2><pre>{packageLayout}</pre><p><code>raw/</code> and <code>metadata/</code> are required contributor inputs. The optional <code>requests/</code> timeline may be supplied directly or derived from request-event logs; the remaining records are generated and checked automatically.</p></section>
+      <section className="data-guide-card"><p className="eyebrow">Run metadata</p><h2>Set parameters for each run</h2><p>Record only values confirmed by the experiment configuration. For inference, include model, GPU, GPU count, serving engine, TP number, cache and weight quantization, GPU frequency, concurrency, workload pattern, and any applicable arrival-rate or token totals.</p><p>For training, keep the model, precision, sequence length, microbatch, gradient accumulation, dataset, and checkpoint metadata.</p></section>
+      <section className="data-guide-card"><p className="eyebrow">Inference request log</p><h2>Enable the demand timeline</h2><p>Supply an optional time-binned timeline with <code>time_relative_s</code>, <code>window_s</code>, <code>requests_arrived</code>, <code>mean_prompt_tokens</code>, and <code>mean_output_tokens</code>. Add <code>active_requests</code> when available.</p><p>If you only have event-level logs, provide request ID, arrival time, prompt tokens, and output tokens; the builder can derive the timeline before publication.</p></section>
+      <section className="data-guide-card"><p className="eyebrow">GPU telemetry</p><h2>Keep source readings unchanged</h2><p>Use <code>run_id</code>, <code>timestamp</code>, <code>time_relative_s</code>, <code>gpu_id</code>, and <code>power_w</code>. Preserve original cadence; include clock, utilization, memory, temperature, and stage fields whenever they are recorded.</p><p>Missing optional telemetry must remain empty or <code>null</code>, never inferred.</p></section>
+    </div>
+    <div className="about-actions"><a className="button button-primary" href={documentationUrl} target="_blank" rel="noreferrer">Read the full submission schema ↗</a><a className="button button-secondary" href="#/">← Return to Trace Catalog</a></div>
+  </main>;
+}
+
 function About() {
-  return <main className="about-main static-about"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>About</span></div><section className="about-hero"><p className="eyebrow">Public research dataset</p><h1>About the trace explorer</h1><p>This GitHub Pages edition presents reviewed, canonical GPU power traces selected for intentional public release, plus clearly labeled synthetic training and inference showcases. The local FastAPI edition remains available for private-data workflows and is unchanged.</p><div className="privacy-callout"><span className="privacy-dot" /><div><strong>Public by design</strong><p>Displayed data is sanitized and either research-ready or explicitly synthetic; private HPC inputs are not included.</p></div></div></section><div className="about-grid"><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Mean power</h2><div className="formula">mean(P<sub>total</sub>(t))</div><p>Mean of total observed GPU power over normalized timestamps.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Total energy</h2><div className="formula">∑ P<sub>total</sub>(t) × Δt / 3600</div><p>Timestamp-aware trapezoidal integration in watt-hours.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>High-percentile power</h2><div className="formula">P95, P99 of P<sub>total</sub>(t)</div><p>High quantiles of the normalized total-power series.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Ramp rate</h2><div className="formula">R<sub>δ</sub>(t) = [P(t) − P(t − δ)] / δ</div><p>Computed from actual time rather than fixed row offsets.</p></section></div><div className="about-actions"><a className="button button-primary" href="#/">← Return to Trace Catalog</a><a className="button button-secondary" href={REPOSITORY_URL} target="_blank" rel="noreferrer">View source on GitHub ↗</a></div></main>;
+  return <main className="about-main static-about"><PublicDataNotice /><div className="detail-breadcrumb"><a href="#/">Trace Catalog</a><span>/</span><span>About</span></div><section className="about-hero"><p className="eyebrow">Public research dataset</p><h1>About the trace explorer</h1><p>This GitHub Pages edition presents reviewed, canonical GPU power traces selected for intentional public release, plus clearly labeled synthetic training and inference showcases. The local FastAPI edition remains available for private-data workflows and is unchanged.</p><div className="privacy-callout"><span className="privacy-dot" /><div><strong>Public by design</strong><p>Displayed data is sanitized and either research-ready or explicitly synthetic; private HPC inputs are not included.</p></div></div></section><div className="about-grid"><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Mean power</h2><div className="formula">mean(P<sub>total</sub>(t))</div><p>Mean of total observed GPU power over normalized timestamps.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Total energy</h2><div className="formula">∑ P<sub>total</sub>(t) × Δt / 3600</div><p>Timestamp-aware trapezoidal integration in watt-hours.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>High-percentile power</h2><div className="formula">P95, P99 of P<sub>total</sub>(t)</div><p>High quantiles of the normalized total-power series.</p></section><section className="about-card"><p className="eyebrow">Metric definition</p><h2>Ramp rate</h2><div className="formula">R<sub>δ</sub>(t) = [P(t) − P(t − δ)] / δ</div><p>Computed from actual time rather than fixed row offsets.</p></section></div><div className="about-actions"><a className="button button-primary" href="#/data-guide">Open data guide</a><a className="button button-secondary" href={REPOSITORY_URL} target="_blank" rel="noreferrer">View source on GitHub ↗</a></div></main>;
 }
 
 function NotFound() { return <main className="standalone-state"><EmptyState title="Route not found">Return to the public trace catalog.</EmptyState><a className="button button-primary" href="#/">Back to catalog</a></main>; }
@@ -345,6 +465,7 @@ export function StaticDemoApp() {
   else if (!catalog) page = <main className="standalone-state"><LoadingBlock label="Loading public catalog…" /></main>;
   else if (route === "/" || route === "") page = <Home catalog={catalog} />;
   else if (route === "/about") page = <About />;
+  else if (route === "/data-guide") page = <DataGuide />;
   else {
     const dataMatch = route.match(/^\/runs\/([^/]+)\/data$/);
     const runMatch = route.match(/^\/runs\/([^/]+)$/);

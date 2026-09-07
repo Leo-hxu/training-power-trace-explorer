@@ -4,9 +4,26 @@ export type PublicRun = Run & {
   run_json_file_id: string;
   raw_csv_file_id: string;
   metadata_json_file_id: string;
+  /** Optional Google Drive CSV containing the time-binned inference demand series. */
+  request_timeline_file_id?: string | null;
 };
 
-export type PublicRunDetail = { run: PublicRun; samples: Sample[] };
+export type InferenceRequestTimelinePoint = {
+  time_relative_s: number | string;
+  window_s?: number | string | null;
+  requests_arrived?: number | string | null;
+  active_requests?: number | string | null;
+  mean_prompt_tokens?: number | string | null;
+  mean_output_tokens?: number | string | null;
+  mean_request_tokens?: number | string | null;
+};
+
+export type PublicRunDetail = {
+  run: PublicRun;
+  samples: Sample[];
+  /** Optional request-demand series aligned to the power trace's relative time. */
+  inference_timeline?: InferenceRequestTimelinePoint[];
+};
 
 type DriveConfiguration = {
   apiKey: string;

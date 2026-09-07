@@ -1,14 +1,14 @@
-# Training Power Trace Explorer
+# LLM Power Trace Explorer
 
-Training Power Trace Explorer has two complementary modes: a local research dashboard for scanning, filtering, validating, and interactively inspecting private LLM training GPU power traces, plus a hosted community contribution flow for reviewed, consented data sharing. The local catalog preserves source paths, normalizes multiple logger schemas, computes timestamp-aware power metrics, and records every parse failure.
+LLM Power Trace Explorer has two complementary modes: a local research dashboard for scanning, filtering, validating, and interactively inspecting private LLM training and inference GPU power traces, plus a hosted community contribution flow for reviewed, consented data sharing. The local catalog preserves source paths, normalizes multiple logger schemas, computes timestamp-aware power metrics, and records every parse failure.
 
 ## Public dataset
 
-Reviewed GPU training power traces are published through GitHub Pages:
+Reviewed GPU training and inference power traces are published through GitHub Pages:
 
 **[https://leo-hxu.github.io/training-power-trace-explorer/](https://leo-hxu.github.io/training-power-trace-explorer/)**
 
-The public build is generated from `github-pages/` with `npm run build:pages`. It contains only intentionally public, research-ready canonical exports; it does not include training logs, Slurm scripts, cache files, source-system paths, or access to the local FastAPI service. The complete scanner and private-data API remain local by design. Selection details and exclusion counts are recorded in `github-pages/public-data/publication-audit.json`.
+The public build is generated from `github-pages/` with `npm run build:pages`. It contains only intentionally public, research-ready canonical exports and clearly labeled synthetic demonstrations; it does not include training logs, Slurm scripts, cache files, source-system paths, or access to the local FastAPI service. The complete scanner and private-data API remain local by design. Published artifacts are served from the configured public data store; see [the public-data guide](docs/google-drive-public-data.md) and [the contributor schema](docs/DATA_SUBMISSION.md).
 
 ## Community submissions
 
