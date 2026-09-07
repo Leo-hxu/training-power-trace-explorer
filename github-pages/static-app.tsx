@@ -59,7 +59,7 @@ function modelLabel(run: Pick<Run, "model" | "model_metadata_status">) {
 }
 
 function workloadLabel(run: Pick<Run, "workload_type">) {
-  return run.workload_type === "Inference" ? "Inference" : "Training";
+  return String(run.workload_type ?? "Training").trim().toLowerCase() === "inference" ? "Inference" : "Training";
 }
 
 function syntheticInferenceTimeline(run: Pick<Run, "duration_observed_s" | "source_family" | "quality_status" | "workload_type">): InferenceRequestTimelinePoint[] | undefined {
@@ -213,7 +213,13 @@ function Home({ catalog }: { catalog: PublicRun[] }) {
         <div className="sidebar-heading"><div><p className="eyebrow">Catalog controls</p><h2>Filter traces</h2></div><span className="count-pill">{runs.length}</span></div>
         <label className="search-field"><span className="sr-only">Search traces</span><i>⌕</i><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Run ID, model, GPU…" /></label>
         <div className="filter-stack">
-          <label className="filter-field"><span>Workload type</span><select value={workload} onChange={(event) => selectWorkload(event.target.value)}>{workloadTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <div className="filter-field workload-filter">
+            <span>Workload type</span>
+            <div className="workload-switch" role="group" aria-label="Choose workload type">
+              {workloadTypes.map((option) => <button key={option} type="button" className={workload === option ? "is-selected" : ""} aria-pressed={workload === option} onClick={() => selectWorkload(option)}>{option}</button>)}
+            </div>
+            <small>{inferenceView ? "Serving-specific filters are shown below." : "Choose Inference to show serving-specific filters."}</small>
+          </div>
           {filterSpecs.map(([label, value, setter, values]) => (
             <label className="filter-field" key={label}><span>{label}</span><select value={value} onChange={(event) => setter(event.target.value)}><option>All</option>{values.map((option) => <option key={option}>{option}</option>)}</select></label>
           ))}

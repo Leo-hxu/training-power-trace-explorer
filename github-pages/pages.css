@@ -14,9 +14,9 @@ body { background: #f7f8fa; }
 }
 .demo-notice > span { flex: 0 0 auto; padding: 4px 7px; border-radius: 4px; background: #2458d6; color: white; font: 700 8px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .demo-notice p { margin: 0; font-size: 10px; line-height: 1.45; }
-.static-sidebar { transform: none !important; }
+.static-sidebar { transform: none !important; scrollbar-gutter: stable; }
 .static-detail, .static-raw, .static-about { padding-top: 88px; }
-.static-plot-card { position: sticky; }
+.static-plot-card { position: static !important; top: auto !important; }
 .static-footer {
   width: 100%; min-height: 42px; margin-top: auto; padding: 12px 24px;
   display: flex; align-items: center; justify-content: center; gap: 5px;
@@ -27,6 +27,10 @@ body { background: #f7f8fa; }
 .static-about .about-grid { margin-top: 8px; }
 .metadata-actions .button:last-child { grid-column: 1 / -1; }
 .detail-content { min-width: 0; display: grid; gap: 18px; }
+.workload-switch { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid #d5dbe5; border-radius: 7px; background: #fff; }
+.workload-switch button { min-width: 0; border: 0; border-right: 1px solid #d5dbe5; background: transparent; padding: 8px 6px; color: #58657a; font-size: 10px; font-weight: 700; cursor: pointer; }
+.workload-switch button:last-child { border-right: 0; }.workload-switch button:hover { background: #f5f8ff; }.workload-switch button.is-selected { background: #2458d6; color: #fff; }
+.workload-filter small { color: #7a879a; font-size: 9px; line-height: 1.35; }
 
 .inference-timeline-card { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .timeline-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 15px 17px 13px; border-bottom: 1px solid var(--line); }
