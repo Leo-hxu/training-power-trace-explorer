@@ -2,8 +2,9 @@ import type { Run, Sample } from "../app/lib/types";
 
 export type PublicRun = Run & {
   run_json_file_id: string;
-  raw_csv_file_id: string;
-  metadata_json_file_id: string;
+  /** Optional downloadable artifacts. Compact public records embed this data in run_json_file_id. */
+  raw_csv_file_id?: string | null;
+  metadata_json_file_id?: string | null;
   /** Optional Google Drive CSV containing the time-binned inference demand series. */
   request_timeline_file_id?: string | null;
 };

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -21,11 +21,16 @@ function argument(name, fallback = null) {
 function usage() {
   console.log(`Usage:
   node scripts/build_source_verified_inference_package.mjs build \\
-    --source <downloaded-run-folder> --output <package-folder>
+    --source <downloaded-run-folder> --output <package-folder> [--compact true]
 
   node scripts/build_source_verified_inference_package.mjs finalize \\
     --output <package-folder> --raw-file-id <id> --metadata-file-id <id> \\
     --request-file-id <id> [--run-file-id <id>] [--catalog <existing-catalog.json>]
+
+For a compact public publication, build with --compact true. It writes only the
+browser display bundle (runs/<run_id>.json) and local validation records. Then
+finalize with --compact true and --run-file-id <uploaded Drive file id> to merge
+the compact record into the catalog.
     [--catalog-base64 <existing-catalog-base64>]
 
 The build phase turns the source DCGM CSVs plus vLLM metrics into browser-ready
@@ -76,13 +81,23 @@ async function sha256(path) {
 }
 
 async function verifySourceFiles(source, manifest, runId) {
-  const expectedNames = {
-    "dcgm_gpu0.csv": `dcgm_${runId}_gpu0.csv`,
-    "dcgm_gpu1.csv": `dcgm_${runId}_gpu1.csv`,
-    "instance_facts.json": "instance_facts.json",
-    "vllm_metrics.jsonl": "vllm_metrics.jsonl",
-    "vllm_server.log": `vllm_server_${runId}.log`,
-  };
+  const sourceNames = await readdir(source);
+  const expectedNames = { "instance_facts.json": "instance_facts.json" };
+  const serverLogName = sourceNames.find((name) => name === "vllm_server.log" || /^vllm_server_.+\.log$/i.test(name));
+  if (!serverLogName) throw new Error("No vLLM server log was supplied.");
+  expectedNames[serverLogName] = serverLogName === "vllm_server.log" ? `vllm_server_${runId}.log` : serverLogName;
+  if (sourceNames.includes("run_record.json")) expectedNames["run_record.json"] = "run_record.json";
+  const timelineName = sourceNames.find((name) => name === "timeline.csv" || /^timeline_.+\.csv$/i.test(name));
+  if (timelineName) expectedNames[timelineName] = timelineName === "timeline.csv" ? `timeline_${runId}.csv` : timelineName;
+  else expectedNames["vllm_metrics.jsonl"] = "vllm_metrics.jsonl";
+  const gpuFiles = sourceNames.map((name) => {
+    const match = name.match(/^dcgm_gpu([0-9]+)\.csv$/i) ?? name.match(/^dcgm_(?!idle_).+_gpu([0-9]+)\.csv$/i);
+    return { name, match };
+  }).filter((entry) => entry.match).sort((left, right) => Number(left.match[1]) - Number(right.match[1]));
+  if (!gpuFiles.length) throw new Error("No active per-GPU DCGM CSV files were supplied.");
+  for (const gpuFile of gpuFiles) {
+    expectedNames[gpuFile.name] = gpuFile.name.startsWith("dcgm_gpu") ? `dcgm_${runId}_gpu${gpuFile.match[1]}.csv` : gpuFile.name;
+  }
   const results = [];
   for (const [localName, manifestName] of Object.entries(expectedNames)) {
     const expected = manifest.files?.[manifestName];
@@ -95,6 +110,18 @@ async function verifySourceFiles(source, manifest, runId) {
     results.push({ local_name: localName, manifest_name: manifestName, bytes: actualSize, sha256: actualHash });
   }
   return results;
+}
+
+async function activeDcgmFiles(source) {
+  return (await readdir(source))
+    .map((name) => ({ name, match: name.match(/^dcgm_gpu([0-9]+)\.csv$/i) ?? name.match(/^dcgm_(?!idle_).+_gpu([0-9]+)\.csv$/i) }))
+    .filter((entry) => entry.match)
+    .sort((left, right) => Number(left.match[1]) - Number(right.match[1]))
+    .map((entry) => join(source, entry.name));
+}
+
+function firstReported(...values) {
+  return values.find((value) => value !== null && value !== undefined && value !== "") ?? null;
 }
 
 async function readDcgmCsv(path) {
@@ -290,6 +317,45 @@ async function buildTimeline(metricsPath, traceStart, traceEnd, windowS = 5) {
   };
 }
 
+async function readTimelineCsv(path, duration) {
+  const input = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
+  let columns = null;
+  const rawRows = [];
+  for await (const line of input) {
+    if (!line) continue;
+    if (!columns) {
+      columns = line.split(",");
+      continue;
+    }
+    const values = line.split(",");
+    const raw = Object.fromEntries(columns.map((column, index) => [column, values[index] ?? ""]));
+    const time = asNumber(raw.time_relative_s);
+    if (time === null || time < 0 || time > duration + 1) continue;
+    rawRows.push({
+      time_relative_s: rounded(time),
+      requests_arrived: Math.max(0, Math.round(asNumber(raw.requests_arrived) ?? 0)),
+      active_requests: asNumber(raw.active_requests) === null ? null : Math.round(asNumber(raw.active_requests)),
+      mean_prompt_tokens: rounded(asNumber(raw.mean_prompt_tokens)),
+      mean_output_tokens: rounded(asNumber(raw.mean_output_tokens)),
+    });
+  }
+  if (!rawRows.length) throw new Error("No time-aligned request telemetry overlapped the DCGM trace.");
+  const intervals = rawRows.slice(1).map((row, index) => row.time_relative_s - rawRows[index].time_relative_s).filter((value) => value > 0);
+  const windowS = median(intervals) ?? 1;
+  const rows = rawRows.map((row) => ({
+    ...row,
+    window_s: rounded(windowS),
+    mean_request_tokens: rounded(row.mean_prompt_tokens === null && row.mean_output_tokens === null ? null : (row.mean_prompt_tokens ?? 0) + (row.mean_output_tokens ?? 0)),
+  }));
+  return {
+    rows,
+    maxActive: Math.max(...rows.map((row) => row.active_requests ?? 0)),
+    totalArrivals: rows.reduce((sum, row) => sum + row.requests_arrived, 0),
+    totalCompleted: null,
+    observedSeconds: Math.max(0, rows.at(-1).time_relative_s - rows[0].time_relative_s),
+  };
+}
+
 function modelFamily(model) {
   const value = model.toLowerCase();
   if (value.includes("llama-3.1")) return "Llama-3.1";
@@ -300,16 +366,26 @@ function modelFamily(model) {
 async function build() {
   const source = resolve(required(argument("--source"), "--source"));
   const output = resolve(required(argument("--output"), "--output"));
+  const compact = argument("--compact") === "true";
   const manifest = JSON.parse(await readFile(join(source, "checksums.json"), "utf8"));
   const runId = required(manifest.cell_id, "checksums.json cell_id");
+  if (Array.isArray(manifest.incomplete) && manifest.incomplete.length) {
+    throw new Error(`Source manifest lists incomplete files for ${runId}.`);
+  }
   const sourceFiles = await verifySourceFiles(source, manifest, runId);
-  const [gpu0, gpu1, instanceFacts, serverLog] = await Promise.all([
-    readDcgmCsv(join(source, "dcgm_gpu0.csv")),
-    readDcgmCsv(join(source, "dcgm_gpu1.csv")),
+  const sourceNames = await readdir(source);
+  const serverLogName = sourceNames.find((name) => name === "vllm_server.log" || /^vllm_server_.+\.log$/i.test(name));
+  const timelineName = sourceNames.find((name) => name === "timeline.csv" || /^timeline_.+\.csv$/i.test(name));
+  const [gpuInputs, instanceFacts, serverLog, runRecord] = await Promise.all([
+    activeDcgmFiles(source),
     readFile(join(source, "instance_facts.json"), "utf8").then(JSON.parse),
-    readFile(join(source, "vllm_server.log"), "utf8"),
+    readFile(join(source, required(serverLogName, "vLLM server log")), "utf8"),
+    readFile(join(source, "run_record.json"), "utf8").then(JSON.parse).catch((error) => {
+      if (error?.code === "ENOENT") return {};
+      throw error;
+    }),
   ]);
-  const sourceRows = [...gpu0, ...gpu1];
+  const sourceRows = (await Promise.all(gpuInputs.map(readDcgmCsv))).flat();
   const traceStart = Math.min(...sourceRows.map((row) => row.epoch));
   const traceEnd = Math.max(...sourceRows.map((row) => row.epoch));
   const duration = traceEnd - traceStart;
@@ -330,56 +406,60 @@ async function build() {
     temperature_c: rounded(row.temperature_c),
     stage: null,
   })).sort((left, right) => left.time_relative_s - right.time_relative_s || Number(left.gpu_id) - Number(right.gpu_id));
-  const timeline = await buildTimeline(join(source, "vllm_metrics.jsonl"), traceStart, traceEnd);
+  const hasSourceTimeline = Boolean(timelineName);
+  const timeline = hasSourceTimeline
+    ? await readTimelineCsv(join(source, timelineName), duration)
+    : await buildTimeline(join(source, "vllm_metrics.jsonl"), traceStart, traceEnd);
   const server = parseServerConfiguration(serverLog);
   const stats = powerStats(samples, samplingMedian || 0.1, duration);
-  const reportedGpuType = instanceFacts.gpu_csv?.match(/^(NVIDIA [^,]+)/m)?.[1] ?? "NVIDIA H200";
+  const reportedGpuType = firstReported(runRecord.gpu_type, instanceFacts.gpu_csv?.match(/^(NVIDIA [^,]+)/m)?.[1], "Not reported");
   // Keep catalog filtering consistent with the established hardware taxonomy
   // while preserving the source-reported vendor name in the metadata record.
   const gpuType = reportedGpuType.replace(/^NVIDIA\s+/i, "");
   const gpuIds = [...new Set(samples.map((sample) => sample.gpu_id))];
   const sourceDirectory = `LLM-Power-Runs-Main / Runs/${manifest.dest}`;
+  const experimentFamily = argument("--experiment-family", "LLM-Power-Runs-Main");
   const arrivalRate = timeline.observedSeconds > 0 ? timeline.totalArrivals / timeline.observedSeconds : null;
   const run = {
     run_id: runId,
     workload_type: "Inference",
-    source_family: "LLM-Power-Runs-Main",
+    source_family: experimentFamily,
     source_directory: sourceDirectory,
     trace_path: `raw/${runId}.csv`,
     stdout_path: null,
     stderr_path: null,
     plot_path: null,
     meta_path: `metadata/${runId}.json`,
-    model: server.model,
-    model_family: modelFamily(server.model),
-    model_source_label: "vLLM server configuration",
+    model: firstReported(runRecord.model, server.model, "Not reported"),
+    model_family: modelFamily(firstReported(runRecord.model, server.model, "Not reported")),
+    model_source_label: runRecord.model ? "Source run record" : "vLLM server configuration",
     model_metadata_status: "reported",
     method: "vLLM serving",
-    inference_engine: server.version ? `vLLM ${server.version}` : "vLLM",
-    tensor_parallel_size: server.tensorParallel,
-    kv_cache_quantization: server.kvCache ?? "Not reported",
-    model_weight_quantization: server.quantization === "None" ? "None" : (server.quantization ?? "Not reported"),
-    gpu_frequency_mhz: null,
-    in_flight_requests: timeline.maxActive || null,
-    concurrency: timeline.maxActive || null,
-    arrival_pattern: "BurstGPT peak-arrival (unbounded)",
+    inference_engine: firstReported(runRecord.serving_engine, server.version ? `vLLM ${server.version}` : null, "vLLM"),
+    tensor_parallel_size: firstReported(runRecord.tp_size, server.tensorParallel),
+    kv_cache_quantization: firstReported(runRecord.kv_cache_quant, server.kvCache, "Not reported"),
+    model_weight_quantization: firstReported(runRecord.weight_quant, server.quantization === "None" ? "None" : server.quantization, "Not reported"),
+    gpu_frequency_mhz: firstReported(runRecord.gpu_frequency, null),
+    in_flight_requests: firstReported(runRecord.concurrency, timeline.maxActive, null),
+    concurrency: firstReported(runRecord.concurrency, timeline.maxActive, null),
+    arrival_pattern: firstReported(runRecord.workload_pattern, "Not reported"),
     arrival_rate_rps: rounded(arrivalRate),
     arrival_rate_label: arrivalRate === null ? "Derived vLLM counters unavailable" : `Derived from vLLM request-token counters · ${rounded(arrivalRate, 2)} req/s`,
-    prompt_profile: "Not reported; cumulative vLLM token counters are available",
+    prompt_profile: runRecord.max_tokens ? `Max ${runRecord.max_tokens} output tokens` : "Not reported; cumulative vLLM token counters are available",
     gpu_type: gpuType,
     gpu_model_reported: reportedGpuType,
     gpu_count: gpuIds.length,
     precision: server.dtype === "torch.bfloat16" ? "BF16" : server.dtype,
     compute_dtype: server.dtype === "torch.bfloat16" ? "bfloat16" : server.dtype,
-    quantization_bits: server.quantization === "None" ? "None" : (server.quantization ?? "Not reported"),
-    parallelism: `DP=1, TP=${server.tensorParallel ?? "Not reported"}, PP=1`,
+    quantization_bits: firstReported(runRecord.weight_quant, server.quantization === "None" ? "None" : server.quantization, "Not reported"),
+    parallelism: `DP=1, TP=${firstReported(runRecord.tp_size, server.tensorParallel, "Not reported")}, PP=1`,
     sequence_length: server.maxSequence ? `Max ${server.maxSequence.toLocaleString()} tokens` : "Not reported",
     microbatch_size: "Not applicable",
     grad_accum_steps: "Not applicable",
     global_batch_size: "Not applicable",
     checkpoint_interval: "Not applicable",
-    dataset_name: "BurstGPT",
-    duration_declared_min: "Not reported",
+    dataset_name: experimentFamily,
+    duration_declared_min: runRecord.window_duration_s ? rounded(runRecord.window_duration_s / 60, 3) : "Not reported",
     duration_observed_s: rounded(duration),
     sampling_interval_declared_s: "Not reported",
     sampling_interval_observed_median_s: rounded(samplingMedian, 6),
@@ -402,12 +482,17 @@ async function build() {
         message: "The selected DCGM, instance-facts, vLLM metrics, and server-log files match the source SHA-256 manifest.",
       },
       {
-        code: "arrivals_derived_from_vllm_counters",
+        code: hasSourceTimeline ? "source_request_timeline_verified" : "arrivals_derived_from_vllm_counters",
         severity: "info",
-        message: "Requests-arrived values are derived from changes in vLLM active requests and the vLLM request-token histogram count; raw per-request arrival events were not supplied.",
+        message: hasSourceTimeline
+          ? "The time-aligned request telemetry CSV matches the source SHA-256 manifest."
+          : "Requests-arrived values are derived from changes in vLLM active requests and the vLLM request-token histogram count; raw per-request arrival events were not supplied.",
       },
     ],
-    missing_fields: ["Raw per-request arrival events", "Configured GPU frequency"],
+    missing_fields: [
+      ...(hasSourceTimeline ? [] : ["Raw per-request arrival events"]),
+      ...(runRecord.gpu_frequency === null || runRecord.gpu_frequency === undefined ? ["Configured GPU frequency"] : []),
+    ],
     timestamp_issues: [],
     gpu_count_mismatch: false,
     duplicate_warning: false,
@@ -420,7 +505,9 @@ async function build() {
       verified_files: sourceFiles,
       incomplete_manifest_entries: manifest.incomplete ?? [],
     },
-    request_timeline_method: "5-second bins derived from vLLM Prometheus cumulative counters",
+    request_timeline_method: hasSourceTimeline
+      ? "Source-provided time-aligned inference request telemetry"
+      : "5-second bins derived from vLLM Prometheus cumulative counters",
     requests_completed: timeline.totalCompleted,
     requests_arrived_derived: timeline.totalArrivals,
   };
@@ -440,14 +527,29 @@ async function build() {
       derived_arrivals: timeline.totalArrivals,
     },
   };
-  for (const directory of ["raw", "metadata", "requests", "runs"]) await mkdir(join(output, directory), { recursive: true });
-  await Promise.all([
-    writeFile(join(output, "raw", `${runId}.csv`), csvText(CANONICAL_COLUMNS, samples)),
-    writeFile(join(output, "metadata", `${runId}.json`), `${JSON.stringify(run, null, 2)}\n`),
-    writeFile(join(output, "requests", `${runId}.csv`), csvText(TIMELINE_COLUMNS, timeline.rows)),
-    writeFile(join(output, "detail-template.json"), JSON.stringify(detailTemplate)),
+  if (compact) {
+    run.source_directory = "LLM-Power-Runs-Main source archive";
+    run.trace_path = "Embedded in compact public display payload";
+    run.meta_path = "Embedded in compact public display payload";
+    run.storage = { provider: "google-drive", format: "compact-run-json" };
+  }
+  const compactDetail = { run, samples, inference_timeline: timeline.rows };
+  const directories = compact ? ["runs"] : ["raw", "metadata", "requests", "runs"];
+  for (const directory of directories) await mkdir(join(output, directory), { recursive: true });
+  const writes = [
+    writeFile(join(output, "detail-template.json"), JSON.stringify(compact ? compactDetail : detailTemplate)),
     writeFile(join(output, "package-validation.json"), `${JSON.stringify(validation, null, 2)}\n`),
-  ]);
+  ];
+  if (compact) {
+    writes.push(writeFile(join(output, "runs", `${runId}.json`), JSON.stringify(compactDetail)));
+  } else {
+    writes.push(
+      writeFile(join(output, "raw", `${runId}.csv`), csvText(CANONICAL_COLUMNS, samples)),
+      writeFile(join(output, "metadata", `${runId}.json`), `${JSON.stringify(run, null, 2)}\n`),
+      writeFile(join(output, "requests", `${runId}.csv`), csvText(TIMELINE_COLUMNS, timeline.rows)),
+    );
+  }
+  await Promise.all(writes);
   console.log(JSON.stringify({
     status: "built",
     run_id: runId,
@@ -460,22 +562,37 @@ async function build() {
 
 async function finalize() {
   const output = resolve(required(argument("--output"), "--output"));
-  const rawFileId = required(argument("--raw-file-id"), "--raw-file-id");
-  const metadataFileId = required(argument("--metadata-file-id"), "--metadata-file-id");
-  const requestFileId = required(argument("--request-file-id"), "--request-file-id");
+  const compact = argument("--compact") === "true";
+  const rawFileId = argument("--raw-file-id");
+  const metadataFileId = argument("--metadata-file-id");
+  const requestFileId = argument("--request-file-id");
+  if (!compact) {
+    required(rawFileId, "--raw-file-id");
+    required(metadataFileId, "--metadata-file-id");
+    required(requestFileId, "--request-file-id");
+  }
   const runFileId = argument("--run-file-id", "");
   const template = JSON.parse(await readFile(join(output, "detail-template.json"), "utf8"));
   const runId = template.run.run_id;
-  const publicRun = {
-    ...template.run,
-    source_directory: "Google Drive public data store / LLM-Power-Runs-Main",
-    trace_path: `Google Drive / raw / ${runId}.csv`,
-    meta_path: `Google Drive / metadata / ${runId}.json`,
-    raw_csv_file_id: rawFileId,
-    metadata_json_file_id: metadataFileId,
-    request_timeline_file_id: requestFileId,
-    run_json_file_id: runFileId,
-  };
+  const publicRun = compact
+    ? {
+      ...template.run,
+      source_directory: "Google Drive public data store / compact display payload",
+      trace_path: "Embedded in compact public display payload",
+      meta_path: "Embedded in compact public display payload",
+      storage: { provider: "google-drive", format: "compact-run-json" },
+      run_json_file_id: runFileId,
+    }
+    : {
+      ...template.run,
+      source_directory: "Google Drive public data store / LLM-Power-Runs-Main",
+      trace_path: `Google Drive / raw / ${runId}.csv`,
+      meta_path: `Google Drive / metadata / ${runId}.json`,
+      raw_csv_file_id: rawFileId,
+      metadata_json_file_id: metadataFileId,
+      request_timeline_file_id: requestFileId,
+      run_json_file_id: runFileId,
+    };
   const detail = { ...template, run: publicRun };
   await writeFile(join(output, "runs", `${runId}.json`), JSON.stringify(detail));
   const catalogPath = argument("--catalog");
