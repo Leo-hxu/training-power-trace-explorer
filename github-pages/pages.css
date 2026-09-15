@@ -14,7 +14,20 @@ body { background: #f7f8fa; }
 }
 .demo-notice > span { flex: 0 0 auto; padding: 4px 7px; border-radius: 4px; background: #2458d6; color: white; font: 700 8px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .demo-notice p { margin: 0; font-size: 10px; line-height: 1.45; }
-.static-sidebar { transform: none !important; scrollbar-gutter: stable; }
+/* Keep every workload-specific control in the document flow.  A fixed,
+   viewport-height sidebar hid the lower inference controls behind an
+   inner scroller on desktop browsers with overlay scrollbars. */
+.static-dashboard { align-items: start; }
+.static-sidebar {
+  position: sticky;
+  top: 64px;
+  bottom: auto;
+  align-self: start;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  transform: none !important;
+}
 .static-detail, .static-raw, .static-about { padding-top: 88px; }
 .static-plot-card { position: static !important; top: auto !important; }
 .static-footer {

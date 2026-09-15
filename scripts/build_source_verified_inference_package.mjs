@@ -603,7 +603,12 @@ async function finalize() {
       ? JSON.parse(Buffer.from(catalogBase64, "base64").toString("utf8"))
       : JSON.parse(await readFile(resolve(catalogPath), "utf8"));
     const nextCatalog = [publicRun, ...catalog.filter((entry) => entry.run_id !== runId)];
-    await writeFile(join(output, "catalog.json"), `${JSON.stringify(nextCatalog, null, 2)}\n`);
+    const serializedCatalog = `${JSON.stringify(nextCatalog, null, 2)}\n`;
+    await writeFile(join(output, "catalog.json"), serializedCatalog);
+    // When an on-disk catalog was provided, keep it current as each run is
+    // finalized. This makes a resumable multi-file upload publishable without
+    // requiring callers to merge one per-run catalog file afterward.
+    if (catalogPath) await writeFile(resolve(catalogPath), serializedCatalog);
   }
   console.log(JSON.stringify({
     status: "finalized",
