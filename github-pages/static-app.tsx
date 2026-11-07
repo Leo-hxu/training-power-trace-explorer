@@ -479,5 +479,5 @@ export function StaticDemoApp() {
     else if (runMatch) page = <RunRoute catalog={catalog} runId={decodeURIComponent(runMatch[1])} rawData={false} />;
     else page = <NotFound />;
   }
-  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">LLM Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a></footer></div>;
+  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">LLM Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a> · Data <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a> · Code <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>MIT</a></footer></div>;
 }

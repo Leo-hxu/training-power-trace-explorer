@@ -10,6 +10,11 @@ Reviewed GPU training and inference power traces are published through GitHub Pa
 
 The public build is generated from `github-pages/` with `npm run build:pages`. It contains only intentionally public, research-ready canonical exports and clearly labeled synthetic demonstrations; it does not include training logs, Slurm scripts, cache files, source-system paths, or access to the local FastAPI service. The complete scanner and private-data API remain local by design. Published artifacts are served from the configured public data store; see [the public-data guide](docs/google-drive-public-data.md) and [the contributor schema](docs/DATA_SUBMISSION.md).
 
+## License
+
+- **Code** (everything in this repository except published trace data) is released under the [MIT License](LICENSE).
+- **Data** (the published catalog, trace bundles, and derived CSV downloads) is released under [Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE-DATA). You may share and adapt the data for any purpose, including commercially, provided you give appropriate credit and indicate if changes were made.
+
 ## Community submissions
 
 The hosted application adds a signed-in contribution flow for external researchers:
