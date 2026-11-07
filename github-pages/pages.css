@@ -92,3 +92,9 @@ body { background: #f7f8fa; }
   .data-guide-ownership > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .data-guide-ownership > div:last-child { border-bottom: 0; }
 }
+
+.dataset-wide { grid-column: 1 / -1; }
+.dataset-table th, .dataset-table td { white-space: nowrap; }
+.dataset-table td:last-child { white-space: normal; }
+.dataset-gap { color: #c3cad6; }
+.data-guide-callout .button { padding: 4px 10px; font-size: 10px; }

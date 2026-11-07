@@ -1,7 +1,11 @@
 import type { Run, Sample } from "../app/lib/types";
 
 export type PublicRun = Run & {
-  run_json_file_id: string;
+  /** Per-run payload (legacy layout). Bundled catalogs use display_bundle_file_id instead. */
+  run_json_file_id?: string;
+  /** Shared Drive file holding several runs as {entry: PublicRunDetail}. */
+  display_bundle_file_id?: string;
+  display_bundle_entry?: string;
   /** Optional downloadable artifacts. Compact public records embed this data in run_json_file_id. */
   raw_csv_file_id?: string | null;
   metadata_json_file_id?: string | null;
@@ -57,7 +61,29 @@ async function loadJson<T>(fileId: string, signal?: AbortSignal): Promise<T> {
 export const loadCatalog = (signal?: AbortSignal) =>
   loadJson<PublicRun[]>(driveConfiguration().catalogFileId, signal);
 
-export const loadRun = (run: PublicRun, signal?: AbortSignal) =>
-  loadJson<PublicRunDetail>(run.run_json_file_id, signal);
+const bundleCache = new Map<string, Promise<Record<string, PublicRunDetail>>>();
+
+function loadBundle(fileId: string) {
+  let bundle = bundleCache.get(fileId);
+  if (!bundle) {
+    // Not tied to one caller's AbortSignal: other runs in the same bundle reuse it.
+    bundle = loadJson<Record<string, PublicRunDetail>>(fileId);
+    bundle.catch(() => bundleCache.delete(fileId));
+    bundleCache.set(fileId, bundle);
+  }
+  return bundle;
+}
+
+export async function loadRun(run: PublicRun, signal?: AbortSignal): Promise<PublicRunDetail> {
+  if (run.display_bundle_file_id) {
+    const bundle = await loadBundle(run.display_bundle_file_id);
+    signal?.throwIfAborted();
+    const entry = bundle[run.display_bundle_entry ?? run.run_id];
+    if (!entry) throw new Error(`Run ${run.run_id} is missing from its data bundle`);
+    return { ...entry, run: { ...entry.run, ...run } };
+  }
+  if (!run.run_json_file_id) throw new Error(`Run ${run.run_id} has no published data file`);
+  return loadJson<PublicRunDetail>(run.run_json_file_id, signal);
+}
 
 export const publicArtifactUrl = (fileId: string) => googleDriveContentUrl(fileId);
