@@ -8,6 +8,7 @@ import { DatasetCard, iidSplit, oodSplit, SPLIT_VERSION } from "./dataset-card";
 import { loadCatalog, loadRun, publicArtifactUrl, type InferenceRequestTimelinePoint, type PublicRun, type PublicRunDetail } from "./public-data";
 
 const REPOSITORY_URL = "https://github.com/Leo-hxu/training-power-trace-explorer";
+const COLLECTION_URL = "https://anonymous.4open.science/r/data-collection-0866/README.md";
 
 function isSynthetic(run: Pick<Run, "source_family" | "quality_status">) {
   return run.source_family === "Synthetic showcase" || run.quality_status === "DEMO_SYNTHETIC";
@@ -33,6 +34,7 @@ function Header() {
         </a>
         <nav className="header-actions">
           <span className="static-demo-badge"><i /> Public reference &amp; demo data</span>
+          <a className="button button-ghost" href={COLLECTION_URL} target="_blank" rel="noreferrer" title="Scripts used to collect these traces">Collection code ↗</a>
           <a className="button button-ghost" href="#/dataset">Dataset card</a>
           <a className="button button-ghost" href="#/data-guide">Data guide</a>
           <a className="button button-ghost" href="#/about">ⓘ About</a>
@@ -47,7 +49,7 @@ function PublicDataNotice() {
   return (
     <div className="demo-notice">
       <span>Public reference data</span>
-      <p>Reviewed public traces are research-ready; separately labeled synthetic showcases demonstrate complete training and inference telemetry. Private HPC files remain outside this deployment.</p>
+      <p>Reviewed public traces are research-ready; separately labeled synthetic showcases demonstrate complete training and inference telemetry. Private HPC files remain outside this deployment. To collect new traces with the same pipeline (Slurm training harness and vLLM/DCGM inference campaign), use the <a href={COLLECTION_URL} target="_blank" rel="noreferrer">data-collection code</a>.</p>
     </div>
   );
 }
@@ -482,5 +484,5 @@ export function StaticDemoApp() {
     else if (runMatch) page = <RunRoute catalog={catalog} runId={decodeURIComponent(runMatch[1])} rawData={false} />;
     else page = <NotFound />;
   }
-  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">LLM Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a> · Data <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a> · Code <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>MIT</a></footer></div>;
+  return <div className="app-frame static-app"><Header />{page}<footer className="static-footer">LLM Power Trace Explorer · Public reference &amp; demo data · <a href={REPOSITORY_URL}>Source on GitHub</a> · <a href={COLLECTION_URL}>Data-collection code</a> · Data <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a> · Code <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>MIT</a></footer></div>;
 }
