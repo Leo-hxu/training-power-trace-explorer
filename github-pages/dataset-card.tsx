@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import type { PublicRun } from "./public-data";
 
 const REPOSITORY_URL = "https://github.com/Leo-hxu/training-power-trace-explorer";
+const COLLECTION_URL = "https://anonymous.4open.science/r/data-collection-0866/README.md";
 export const SPLIT_VERSION = "v1";
 
 /* ---------- Fixed evaluation splits ----------
@@ -224,6 +225,9 @@ export function DatasetCard({ catalog }: { catalog: PublicRun[] }) {
       <Card eyebrow="Schema" title="Telemetry sample fields" wide>
         <Table head={["Field", "Type", "Unit", "Description"]} rows={SAMPLE_FIELDS.map(([f, t, u, d]) => [<code key={f}>{f}</code>, t, u, d])} />
         <p>Each run payload is <code>{"{ run, samples[] }"}</code>; bundles map <code>display_bundle_entry → payload</code>.</p>
+      </Card>
+      <Card eyebrow="Collection" title="Collect traces yourself">
+        <p>The scripts that produced these traces are released at <a href={COLLECTION_URL} target="_blank" rel="noreferrer">data-collection-0866</a>: <code>train/</code> holds the Slurm launch scripts and training harnesses (HPC clusters); <code>inference/</code> holds the serving-campaign pipeline (prompt pools, GPU provisioning, vLLM launch, DCGM telemetry capture, upload) used on rented GPU providers.</p>
       </Card>
       <Card eyebrow="License" title="Terms of use">
         <p>Data (catalog, trace payloads, derived CSVs): <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a>. Code: <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>MIT</a>.</p>
