@@ -188,7 +188,7 @@ export function DatasetCard({ catalog }: { catalog: PublicRun[] }) {
     <section className="data-guide-hero">
       <p className="eyebrow">Released resource · computed live from the published catalog</p>
       <h1>Dataset card</h1>
-      <p>{total} traces ({s.byWorkload.map(([w, n]) => `${n} ${w.toLowerCase()}`).join(", ")}) covering {s.models} models and {s.configs.size} distinct configurations, {hours(allHours)} h of wall-clock telemetry and {s.gpuHours.toFixed(0)} GPU-hours. Data: CC BY 4.0 · Code: MIT.</p>
+      <p>{total} traces ({s.byWorkload.map(([w, n]) => `${n} ${w.toLowerCase()}`).join(", ")}) covering {s.models} models and {s.configs.size} distinct configurations, {hours(allHours)} h of wall-clock telemetry and {s.gpuHours.toFixed(0)} GPU-hours. Data: CC BY 4.0 · Code: Apache 2.0.</p>
       <div className="data-guide-callout"><strong>Fixed splits {SPLIT_VERSION}.</strong><span>Deterministic per configuration; adding runs never reassigns existing ones.</span><button className="button button-secondary" onClick={() => download(`splits-${SPLIT_VERSION}.json`, JSON.stringify(splitsDocument(catalog), null, 2))}>↓ splits.json</button><button className="button button-secondary" onClick={() => download("catalog.json", JSON.stringify(catalog, null, 2))}>↓ catalog.json</button></div>
     </section>
     <div className="data-guide-grid">
@@ -230,7 +230,7 @@ export function DatasetCard({ catalog }: { catalog: PublicRun[] }) {
         <p>The scripts that produced these traces are released at <a href={COLLECTION_URL} target="_blank" rel="noreferrer">data-collection-0866</a>: <code>train/</code> holds the Slurm launch scripts and training harnesses (HPC clusters); <code>inference/</code> holds the serving-campaign pipeline (prompt pools, GPU provisioning, vLLM launch, DCGM telemetry capture, upload) used on rented GPU providers.</p>
       </Card>
       <Card eyebrow="License" title="Terms of use">
-        <p>Data (catalog, trace payloads, derived CSVs): <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a>. Code: <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>MIT</a>.</p>
+        <p>GPU power traces and associated run metadata (catalog, trace payloads, request timelines, derived CSVs): <a href={`${REPOSITORY_URL}/blob/main/LICENSE-DATA`}>CC BY 4.0</a>. Profiling, collection, and analysis code: <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>Apache 2.0</a>.</p>
       </Card>
     </div>
   </main>;

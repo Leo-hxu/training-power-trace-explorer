@@ -10,10 +10,80 @@ Reviewed GPU training and inference power traces are published through GitHub Pa
 
 The public build is generated from `github-pages/` with `npm run build:pages`. It contains only intentionally public, research-ready canonical exports and clearly labeled synthetic demonstrations; it does not include training logs, Slurm scripts, cache files, source-system paths, or access to the local FastAPI service. The complete scanner and private-data API remain local by design. Published artifacts are served from the configured public data store; see [the public-data guide](docs/google-drive-public-data.md) and [the contributor schema](docs/DATA_SUBMISSION.md).
 
+## Dataset inventory
+
+The public release contains **302 GPU power traces** (251 training, 51 inference) covering **60 models** and **123 distinct configurations** (workload × model × GPU type × GPU count), with **420.6 h** of wall-clock telemetry and **1639 GPU-hours**. The live, filterable version of these tables is the explorer's [Dataset card](https://leo-hxu.github.io/training-power-trace-explorer/#/dataset).
+
+### Runs by workload and GPU platform
+
+| Workload | GPU | GPUs / run | Runs | Models | Hours |
+|---|---|---|---|---|---|
+| Training | A100 | 4 | 35 | 16 | 70.0 |
+| Training | H100 | 4 | 52 | 24 | 92.3 |
+| Training | H200 | 4 | 150 | 57 | 212.8 |
+| Training | L40S | 4 | 14 | 10 | 28.0 |
+| Inference | A100 | 1 | 16 | 7 | 3.7 |
+| Inference | A100 | 2 | 2 | 2 | 0.6 |
+| Inference | A100 | 4 | 3 | 3 | 0.7 |
+| Inference | H100 (Lambda) | 1 | 8 | 1 | 2.8 |
+| Inference | H200 | 1 | 14 | 1 | 4.1 |
+| Inference | H200 | 2 | 6 | 1 | 4.9 |
+| Inference | H200 | 4 | 2 | 1 | 0.6 |
+
+### Model families
+
+| Workload | Model family | Runs | Models | GPU types |
+|---|---|---|---|---|
+| Training | Gemma | 122 | 14 | A100, H100, H200, L40S |
+| Training | Qwen | 39 | 13 | A100, H200 |
+| Training | Mistral | 36 | 12 | A100, H100, H200 |
+| Training | Llama | 24 | 8 | H200 |
+| Training | GPT-2 | 12 | 4 | H200 |
+| Training | DeepSeek | 9 | 3 | H200 |
+| Training | GPT-J | 3 | 1 | H200 |
+| Training | GPT-NeoX | 3 | 1 | H200 |
+| Training | Pythia | 3 | 1 | H200 |
+| Inference | Qwen | 34 | 7 | A100, H200 |
+| Inference | Llama | 17 | 2 | A100, H100 (Lambda), H200 |
+
+### Trace durations and sampling
+
+| Workload | Source | Runs | Min (min) | Median (min) | Max (min) | Median interval (s) |
+|---|---|---|---|---|---|---|
+| Training | Reviewed training corpus | 159 | 1.1 | 120.1 | 150.0 | 0.10 |
+| Training | Time-limited; downsampled | 92 | 30.0 | 120.0 | 120.4 | 0.10 |
+| Inference | Reviewed inference corpus | 51 | 11.8 | 14.4 | 83.4 | 0.10 |
+
+### Telemetry availability
+
+| Channel | Present | Absent | Not stated |
+|---|---|---|---|
+| Power | 302 | 0 | 0 |
+| GPU utilization | 302 | 0 | 0 |
+| SM clock | 293 | 9 | 0 |
+| Temperature | 60 | 242 | 0 |
+| Memory used | 60 | 242 | 0 |
+| Stage labels | 0 | 210 | 92 |
+
+Inference demand: 51 of 51 inference runs include a time-binned request series aligned to the power trace; raw per-request event logs are not released.
+
+### Quality tiers
+
+| Tier | Source | Runs |
+|---|---|---|
+| PASS_LIMITED | Reviewed training corpus | 37 |
+| PASS_LIMITED | Time-limited; downsampled | 92 |
+| PASS_MAIN | Reviewed inference corpus | 51 |
+| PASS_MAIN | Reviewed training corpus | 122 |
+
+Only runs that pass automated integrity checks and release review are published. Fixed, configuration-grouped train/validation/test splits (v1) are listed per run in the explorer and downloadable as `splits.json`.
+
+_Regenerate with `python scripts/catalog_inventory.py <catalog.json>`._
+
 ## License
 
-- **Code** (everything in this repository except published trace data) is released under the [MIT License](LICENSE).
-- **Data** (the published catalog, trace bundles, and derived CSV downloads) is released under [Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE-DATA). You may share and adapt the data for any purpose, including commercially, provided you give appropriate credit and indicate if changes were made.
+- **Data** — the GPU power traces and associated run metadata (the published catalog, trace bundles, request timelines, and derived CSV downloads) — are released under [Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE-DATA). You may share and adapt the data for any purpose, including commercially, provided you give appropriate credit and indicate if changes were made.
+- **Code** — the profiling, collection, and analysis code, including this explorer — is released under the [Apache License 2.0](LICENSE). The data-collection scripts are published separately in the [data-collection repository](https://anonymous.4open.science/r/data-collection-0866/README.md) under the same license.
 
 ## Community submissions
 
